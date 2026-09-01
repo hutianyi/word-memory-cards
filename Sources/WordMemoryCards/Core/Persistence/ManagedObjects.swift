@@ -1,0 +1,93 @@
+import CoreData
+import Foundation
+
+@objc(WordEntity)
+final class WordEntity: NSManagedObject {}
+
+extension WordEntity {
+    @nonobjc class func fetchRequest() -> NSFetchRequest<WordEntity> {
+        NSFetchRequest<WordEntity>(entityName: "WordEntity")
+    }
+
+    @NSManaged var id: UUID
+    @NSManaged var english: String
+    @NSManaged var normalizedEnglish: String
+    @NSManaged var chinese: String
+    @NSManaged var createdAt: Date
+    @NSManaged var updatedAt: Date
+    @NSManaged var reviewStates: Set<ReviewStateEntity>
+    @NSManaged var events: Set<ReviewEventEntity>
+}
+
+@objc(ReviewStateEntity)
+final class ReviewStateEntity: NSManagedObject {}
+
+extension ReviewStateEntity {
+    @nonobjc class func fetchRequest() -> NSFetchRequest<ReviewStateEntity> {
+        NSFetchRequest<ReviewStateEntity>(entityName: "ReviewStateEntity")
+    }
+
+    @NSManaged var id: UUID
+    @NSManaged var direction: String
+    @NSManaged var level: Int16
+    @NSManaged var nextReviewDate: Date
+    @NSManaged var lastReviewDate: Date?
+    @NSManaged var totalReviews: Int64
+    @NSManaged var knownCount: Int64
+    @NSManaged var unknownCount: Int64
+    @NSManaged var consecutiveKnown: Int32
+    @NSManaged var lapseCount: Int64
+    @NSManaged var lastResult: String?
+    @NSManaged var createdAt: Date
+    @NSManaged var updatedAt: Date
+    @NSManaged var word: WordEntity?
+    @NSManaged var events: Set<ReviewEventEntity>
+}
+
+@objc(ReviewEventEntity)
+final class ReviewEventEntity: NSManagedObject {}
+
+extension ReviewEventEntity {
+    @nonobjc class func fetchRequest() -> NSFetchRequest<ReviewEventEntity> {
+        NSFetchRequest<ReviewEventEntity>(entityName: "ReviewEventEntity")
+    }
+
+    @NSManaged var id: UUID
+    @NSManaged var reviewedAt: Date
+    @NSManaged var direction: String
+    @NSManaged var result: String
+    @NSManaged var practiceMode: String
+    @NSManaged var levelBefore: Int16
+    @NSManaged var levelAfter: Int16
+    @NSManaged var isSameSessionRetry: Bool
+    @NSManaged var sessionID: UUID
+    @NSManaged var wordEnglishSnapshot: String
+    @NSManaged var wordChineseSnapshot: String
+    @NSManaged var word: WordEntity?
+    @NSManaged var reviewState: ReviewStateEntity
+    @NSManaged var session: StudySessionEntity
+}
+
+@objc(StudySessionEntity)
+final class StudySessionEntity: NSManagedObject {}
+
+extension StudySessionEntity {
+    @nonobjc class func fetchRequest() -> NSFetchRequest<StudySessionEntity> {
+        NSFetchRequest<StudySessionEntity>(entityName: "StudySessionEntity")
+    }
+
+    @NSManaged var id: UUID
+    @NSManaged var mode: String
+    @NSManaged var startedAt: Date
+    @NSManaged var finishedAt: Date?
+    @NSManaged var completed: Bool
+    @NSManaged var baseTaskCount: Int32
+    @NSManaged var formalAnswered: Int32
+    @NSManaged var formalKnown: Int32
+    @NSManaged var formalUnknown: Int32
+    @NSManaged var retryAnswered: Int32
+    @NSManaged var extraAnswered: Int32
+    @NSManaged var extraKnown: Int32
+    @NSManaged var extraUnknown: Int32
+    @NSManaged var events: Set<ReviewEventEntity>
+}

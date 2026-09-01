@@ -1,0 +1,199 @@
+import CoreData
+import Foundation
+import SwiftUI
+import UniformTypeIdentifiers
+
+struct BackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+    let data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        self.data = data
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+enum BackupAlertState: Identifiable {
+    case confirmRestore
+    case confirmReset
+    case message(title: String, message: String)
+
+    var id: String {
+        switch self {
+        case .confirmRestore: return "confirmRestore"
+        case .confirmReset: return "confirmReset"
+        case .message(let title, let message): return "message|\(title)|\(message)"
+        }
+    }
+}
+
+@MainActor
+final class BackupViewModel: ObservableObject {
+    @Published var exportDocument: BackupDocument?
+    @Published var isShowingExporter = false
+    @Published var isShowingImporter = false
+    @Published var alertState: BackupAlertState?
+    @Published private(set) var isBusy = false
+
+    private let container: NSPersistentContainer
+    private let settings: SettingsStore
+    private var pendingEnvelope: BackupEnvelope?
+
+    init(container: NSPersistentContainer, settings: SettingsStore) {
+        self.container = container
+        self.settings = settings
+    }
+
+    var pendingSummaryText: String {
+        pendingEnvelope.map { BackupSummary(envelope: $0).confirmationText } ?? ""
+    }
+
+    var defaultFilename: String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return "WordMemoryCards-Backup-\(formatter.string(from: Date()))"
+    }
+
+    func prepareExport() async {
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let envelope = try await currentEnvelope()
+            exportDocument = BackupDocument(data: try BackupService.encode(envelope))
+            isShowingExporter = true
+        } catch {
+            showError(error)
+        }
+    }
+
+    func handleImport(_ result: Result<URL, Error>) async {
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let url = try result.get()
+            let hasAccess = url.startAccessingSecurityScopedResource()
+            defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
+            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+            pendingEnvelope = try BackupService.decodeAndValidate(data)
+            alertState = .confirmRestore
+        } catch {
+            showError(error)
+        }
+    }
+
+    func confirmRestore() async {
+        guard let pendingEnvelope else { return }
+        isBusy = true
+        defer { isBusy = false }
+
+        do {
+            let safetyEnvelope = try await currentEnvelope()
+            let safetyData = try BackupService.encode(safetyEnvelope)
+            try writeSafetyBackup(safetyData, reason: "PreRestore")
+
+            try await BackupService.restore(pendingEnvelope, into: container)
+            apply(pendingEnvelope.data.settings)
+            self.pendingEnvelope = nil
+            alertState = .message(
+                title: "操作完成",
+                message: "恢复完成。当前词库、学习记录和设置已替换；恢复前安全备份已保存在 App 本地。"
+            )
+        } catch {
+            showError(error)
+        }
+    }
+
+    func confirmResetLearningProgress() async {
+        isBusy = true
+        defer { isBusy = false }
+
+        do {
+            let safetyEnvelope = try await currentEnvelope()
+            let safetyData = try BackupService.encode(safetyEnvelope)
+            try writeSafetyBackup(safetyData, reason: "PreReset")
+            try await LearningProgressResetService.reset(container: container)
+            alertState = .message(
+                title: "操作完成",
+                message: "学习记录已清除。单词全部保留，两个复习方向均已回到 Level 0，并从今天重新开始。"
+            )
+        } catch {
+            showError(error)
+        }
+    }
+
+    func requestResetConfirmation() {
+        alertState = .confirmReset
+    }
+
+    private func currentEnvelope() async throws -> BackupEnvelope {
+        try await BackupService.makeEnvelope(
+            container: container,
+            settings: settingsSnapshot,
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1"
+        )
+    }
+
+    private var settingsSnapshot: BackupSettings {
+        BackupSettings(
+            sessionLimit: settings.sessionLimit.rawValue,
+            englishVoiceIdentifier: settings.englishVoiceIdentifier,
+            chineseVoiceIdentifier: settings.chineseVoiceIdentifier,
+            englishSpeechRate: settings.englishSpeechRate,
+            chineseSpeechRate: settings.chineseSpeechRate,
+            autoSpeakFront: settings.autoSpeakFront,
+            autoSpeakBack: settings.autoSpeakBack,
+            hapticsEnabled: settings.hapticsEnabled,
+            extraPracticeScope: settings.extraPracticeScope.rawValue
+        )
+    }
+
+    private func apply(_ snapshot: BackupSettings) {
+        settings.sessionLimit = SessionLimitOption(rawValue: snapshot.sessionLimit) ?? .thirty
+        settings.englishVoiceIdentifier = snapshot.englishVoiceIdentifier
+        settings.chineseVoiceIdentifier = snapshot.chineseVoiceIdentifier
+        settings.englishSpeechRate = snapshot.englishSpeechRate
+        settings.chineseSpeechRate = snapshot.chineseSpeechRate
+        settings.autoSpeakFront = snapshot.autoSpeakFront
+        settings.autoSpeakBack = snapshot.autoSpeakBack
+        settings.hapticsEnabled = snapshot.hapticsEnabled
+        settings.extraPracticeScope = ExtraPracticeScope(rawValue: snapshot.extraPracticeScope) ?? .weakest20
+    }
+
+    private func writeSafetyBackup(_ data: Data, reason: String) throws {
+        let manager = FileManager.default
+        let support = try manager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let directory = support.appendingPathComponent("SafetyBackups", isDirectory: true)
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let name = "WordMemoryCards-\(reason)-\(formatter.string(from: Date())).json"
+        try data.write(to: directory.appendingPathComponent(name), options: .atomic)
+    }
+
+    private func showError(_ error: Error) {
+        alertState = .message(
+            title: "备份操作失败",
+            message: error.localizedDescription
+        )
+    }
+}
