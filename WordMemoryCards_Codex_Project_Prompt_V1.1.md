@@ -3921,9 +3921,9 @@ iPadOS 16.7.16 兼容
 
 - 最后更新：2026-09-01
 - 当前模型：GPT-5.6 Sol，High
-- 当前阶段：Phase 0–7 功能实现完成；GitHub 公开仓库已创建，等待首次 push
-- 总体状态：核心实现与公开发布材料均已验证
-- 当前阻塞：无功能阻塞；等待将已验证的首次 commit 推送到公开仓库
+- 当前阶段：Phase 0–7 功能实现完成；GitHub 公开版已发布
+- 总体状态：核心实现、公开发布材料与首次 push 均已验证
+- 当前阻塞：无功能阻塞
 
 ## 62.2 已完成节点
 
@@ -4029,6 +4029,7 @@ iPadOS 16.7.16 兼容
 - 公开版工程通过 XcodeGen 重新生成；App、逻辑测试与 UI 测试 target 的 `build-for-testing` 通过。
 - 在 iPad (A16) / iOS Simulator 26.5 上实际执行 XCTest：31/31 通过（29 个逻辑测试、2 个 UI 冒烟测试）。UI 测试使用串行执行，避免当前 Xcode 并发启动多个 UI test runner 时的间歇性系统终止。
 - 已创建公开仓库：<https://github.com/hutianyi/word-memory-cards>；已设为本地 `origin`，首次源码提交与 push 待执行。
+- 首次公开提交：`0952430`（`Initial public release`）已于 2026-09-01 推送至 `main`，仓库地址为 <https://github.com/hutianyi/word-memory-cards>。
 
 ## 62.3 已确认环境
 
@@ -4070,11 +4071,10 @@ iPadOS 16.7.16 兼容
 - UI tests：新增 `WordMemoryCardsUITests` 冒烟测试，使用 `--ui-testing` 内存数据库，不接触正常 App 数据；target 类型已确认为 `com.apple.product-type.bundle.ui-testing`。
 - Physical UI XCTest：Xcode 26 对该 iPadOS 16 真机仍报告 `Logic Testing Unavailable`；UI 测试与逻辑测试都保留到 Simulator 执行。
 - Latest verification：App 真机签名构建、App + 逻辑测试 + UI 测试的 Simulator `build-for-testing` 均成功。
-- Open-source release verification：`xcodebuild test -parallel-testing-enabled NO` 在 iPad (A16) / iOS Simulator 26.5 实际通过 31/31；`git diff --check` 与敏感信息扫描待首次 commit 前复核。
+- Open-source release verification：`xcodebuild test -parallel-testing-enabled NO` 在 iPad (A16) / iOS Simulator 26.5 实际通过 31/31；`git diff --check` 与敏感信息扫描已通过，首次公开提交 `0952430` 已推送到 `origin/main`。
 
 ## 62.6 下一步
 
-1. 推送首次 commit，并将仓库地址与 commit SHA 写入本节。
-2. 在 Xcode 的 Signing & Capabilities 选择用户的 Personal Team，并确认已连接 iPad 处于解锁、信任和 Developer Mode 可用状态。
-3. 安装到 iPad 第五代，完成导入、双向复习、retry、退出、统计、Extra Practice、备份 round-trip 的端到端验收。
-4. 真机专项验证 Zoe / 语舒、语速切换、连续快速点按、音频路由变化、App 前后台与旧设备 TTS fallback。
+1. 在 Xcode 的 Signing & Capabilities 选择用户的 Personal Team，并确认已连接 iPad 处于解锁、信任和 Developer Mode 可用状态。
+2. 安装到 iPad 第五代，完成导入、双向复习、retry、退出、统计、Extra Practice、备份 round-trip 的端到端验收。
+3. 真机专项验证 Zoe / 语舒、语速切换、连续快速点按、音频路由变化、App 前后台与旧设备 TTS fallback。
