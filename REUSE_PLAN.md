@@ -25,7 +25,7 @@
 
 - `Book / Section / Main / Extra` 教材模型改为单一动态 `Word` 词库。
 - 单方向 `VocabItem` 改为一个 Word 对应两个独立 `ReviewState`。
-- 五次 cycle 算法改为日期型 Level 0...9 SRS。
+- 早期五次 cycle 算法曾改为日期型 Level 0...9 SRS；当前正式排期已升级为官方 swift-fsrs 的 FSRS-6。
 - 上游 Codable 单文件进度改为 Core Data + SQLite：`Word`、`ReviewState`、`ReviewEvent`、`StudySession`。
 - 队列改为 due-date 主规则、方向级 weakness、防反向答案污染、base queue 冻结和 same-session retry。
 - Extra Practice 改为只写独立事件，严格禁止修改正式 SRS 状态或 weakness。
@@ -59,4 +59,4 @@
 - SwiftUI 使用 iOS 16 可用的 `ObservableObject`、`@StateObject` 和 `NavigationStack`。
 - 共享依赖只在 App 根部创建；功能级状态使用显式注入，避免无边界的全局对象。
 - 正式数据使用 Core Data SQLite；简单设置使用 `UserDefaults`。
-- 不增加第三方运行时依赖。
+- 第三方运行时依赖仅包含 MIT 许可的官方 `swift-fsrs`，并固定到已审核的 FSRS-6 提交。

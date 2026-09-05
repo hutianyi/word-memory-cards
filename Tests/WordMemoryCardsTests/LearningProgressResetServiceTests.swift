@@ -84,6 +84,9 @@ final class LearningProgressResetServiceTests: XCTestCase {
             XCTAssertEqual(state.lapseCount, 0)
             XCTAssertNil(state.lastReviewDate)
             XCTAssertNil(state.lastResult)
+            let card = try SRSScheduler.decodeCard(XCTUnwrap(state.fsrsCardData))
+            XCTAssertEqual(state.fsrsMigrationVersion, SRSScheduler.migrationVersion)
+            XCTAssertEqual(card.reps, 0)
         }
     }
 }

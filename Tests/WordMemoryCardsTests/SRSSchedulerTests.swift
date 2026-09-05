@@ -1,56 +1,108 @@
+import FSRS
 import XCTest
 @testable import WordMemoryCards
 
 final class SRSSchedulerTests: XCTestCase {
-    private var calendar: Calendar {
-        var value = Calendar(identifier: .gregorian)
-        value.timeZone = TimeZone(secondsFromGMT: 8 * 3600)!
-        return value
+    private let date = Date(timeIntervalSince1970: 1_788_192_000)
+
+    func testConfigurationIsExplicitlyFSRS6() {
+        XCTAssertEqual(SRSScheduler.parameters.w, FSRSDefaults.defaultWv6)
+        XCTAssertEqual(SRSScheduler.parameters.w.count, 21)
+        XCTAssertEqual(SRSScheduler.parameters.requestRetention, 0.92)
+        XCTAssertEqual(SRSScheduler.parameters.maximumInterval, 3_650)
+        XCTAssertFalse(SRSScheduler.parameters.enableFuzz)
+        XCTAssertFalse(SRSScheduler.parameters.enableShortTerm)
+        XCTAssertEqual(FSRS(parameters: SRSScheduler.parameters).version, .v6)
     }
 
-    private var date: Date {
-        DateComponents(
-            calendar: calendar,
-            timeZone: calendar.timeZone,
-            year: 2026,
-            month: 9,
-            day: 1,
-            hour: 23
-        ).date!
+    func testNewKnownMapsToGoodAndProducesFutureDueDate() throws {
+        let card = SRSScheduler.emptyCard(due: date)
+        let decision = try SRSScheduler.decision(card: card, answer: .known, date: date)
+        let expected = try FSRS(parameters: SRSScheduler.parameters)
+            .next(card: card, now: date, grade: .good).card
+
+        XCTAssertEqual(try SRSScheduler.decodeCard(decision.cardData), expected)
+        XCTAssertGreaterThan(decision.nextReviewDate, date)
     }
 
-    func testKnownMovesUpOneLevelUsingCalendarDays() {
-        let decision = SRSScheduler.decision(level: 3, answer: .known, date: date, calendar: calendar)
+    func testNewUnknownMapsToAgain() throws {
+        let card = SRSScheduler.emptyCard(due: date)
+        let decision = try SRSScheduler.decision(card: card, answer: .unknown, date: date)
+        let expected = try FSRS(parameters: SRSScheduler.parameters)
+            .next(card: card, now: date, grade: .again).card
 
-        XCTAssertEqual(decision.newLevel, 4)
-        XCTAssertEqual(
-            decision.nextReviewDate,
-            calendar.date(byAdding: .day, value: 14, to: calendar.startOfDay(for: date))
+        XCTAssertEqual(try SRSScheduler.decodeCard(decision.cardData), expected)
+        XCTAssertEqual(decision.nextReviewDate, expected.due)
+    }
+
+    func testConsecutiveGoodIntervalsGrowDynamically() throws {
+        var card = SRSScheduler.emptyCard(due: date)
+        var intervals: [Int] = []
+
+        for _ in 0..<5 {
+            let decision = try SRSScheduler.decision(card: card, answer: .known, date: card.due)
+            card = try SRSScheduler.decodeCard(decision.cardData)
+            intervals.append(Int(decision.scheduledDays))
+        }
+
+        XCTAssertEqual(intervals, intervals.sorted())
+        XCTAssertGreaterThan(intervals.last ?? 0, intervals.first ?? 0)
+        XCTAssertNotEqual(Array(intervals.prefix(4)), [1, 3, 7, 14])
+        XCTAssertLessThanOrEqual(intervals.last ?? 0, 3_650)
+    }
+
+    func testAgainUsesFSRSInsteadOfHalvingLegacyLevel() throws {
+        var card = SRSScheduler.emptyCard(due: date)
+        let learned = try SRSScheduler.decision(card: card, answer: .known, date: date)
+        card = try SRSScheduler.decodeCard(learned.cardData)
+        let forgotten = try SRSScheduler.decision(
+            card: card,
+            answer: .unknown,
+            date: learned.nextReviewDate
         )
+        let updated = try SRSScheduler.decodeCard(forgotten.cardData)
+
+        XCTAssertEqual(updated.lapses, 1)
+        XCTAssertGreaterThan(updated.stability, 0)
+        XCTAssertGreaterThan(forgotten.nextReviewDate, learned.nextReviewDate)
     }
 
-    func testKnownAtMaximumStaysAtLevelNine() {
-        let decision = SRSScheduler.decision(level: 9, answer: .known, date: date, calendar: calendar)
-        XCTAssertEqual(decision.newLevel, 9)
-        XCTAssertEqual(
-            decision.nextReviewDate,
-            calendar.date(byAdding: .day, value: 365, to: calendar.startOfDay(for: date))
-        )
-    }
+    func testTwentyKnownWordsAreNotForcedIntoTomorrowQueue() throws {
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: date)!
+        var states: [ReviewStateSnapshot] = []
 
-    func testUnknownHalvesLevelAndReturnsTomorrow() {
-        let decision = SRSScheduler.decision(level: 8, answer: .unknown, date: date, calendar: calendar)
-        XCTAssertEqual(decision.newLevel, 4)
-        XCTAssertEqual(
-            decision.nextReviewDate,
-            calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date))
-        )
-    }
+        for index in 0..<20 {
+            let wordID = UUID()
+            for direction in ReviewDirection.allCases {
+                let decision = try SRSScheduler.decision(
+                    card: SRSScheduler.emptyCard(due: date),
+                    answer: .known,
+                    date: date
+                )
+                states.append(
+                    ReviewStateSnapshot(
+                        id: UUID(),
+                        wordID: wordID,
+                        english: "word\(index)",
+                        normalizedEnglish: "word\(index)",
+                        chinese: "释义",
+                        direction: direction,
+                        level: 0,
+                        nextReviewDate: decision.nextReviewDate,
+                        formalKnownCount: 1,
+                        formalUnknownCount: 0,
+                        consecutiveKnown: 1,
+                        lastFormalResult: .known
+                    )
+                )
+            }
+        }
 
-    func testUnknownAtLevelOneReturnsToZero() {
-        XCTAssertEqual(
-            SRSScheduler.decision(level: 1, answer: .unknown, date: date, calendar: calendar).newLevel,
-            0
+        let queue = ReviewQueueBuilder.buildBaseQueue(
+            from: states,
+            sessionLimit: nil,
+            today: tomorrow
         )
+        XCTAssertTrue(queue.isEmpty)
     }
 }

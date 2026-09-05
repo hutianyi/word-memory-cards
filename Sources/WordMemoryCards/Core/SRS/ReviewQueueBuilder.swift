@@ -134,7 +134,9 @@ enum ReviewQueueBuilder {
         let lhsWeakness = WeaknessScorer.score(lhs)
         let rhsWeakness = WeaknessScorer.score(rhs)
         if lhsWeakness != rhsWeakness { return lhsWeakness > rhsWeakness }
-        if lhs.level != rhs.level { return lhs.level < rhs.level }
+        if lhs.formalAttempts != rhs.formalAttempts {
+            return lhs.formalAttempts < rhs.formalAttempts
+        }
         if lhs.normalizedEnglish != rhs.normalizedEnglish {
             return lhs.normalizedEnglish < rhs.normalizedEnglish
         }

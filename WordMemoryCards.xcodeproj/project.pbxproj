@@ -30,6 +30,7 @@
 		57747EBE8CB9EC9AD32CF3B7 /* WordMemoryCardsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72516E3623EF8247610ED75A /* WordMemoryCardsApp.swift */; };
 		581D3F7B084281C36401AB3A /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D91983931EA7365F5E8A99E /* DesignSystem.swift */; };
 		5B341F7F6FE50EC9EA2768F4 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31E42232F5F2A0D37C5854FB /* StatisticsView.swift */; };
+		5DF0ECE4ADF23DB9FFB88AA6 /* FSRS in Frameworks */ = {isa = PBXBuildFile; productRef = C7D957316B1F42EBA98EE892 /* FSRS */; };
 		649EF678829CB2AB686D20F4 /* WeaknessScorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB89904A02BD8A639805F533 /* WeaknessScorer.swift */; };
 		67771824D1CE20C51B465859 /* ReviewQueueBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CB8A20B75D32F1EE4E7315 /* ReviewQueueBuilder.swift */; };
 		760CC130C3944DC2E6C6E167 /* BackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B11D087C25526B40641FBFF /* BackupModels.swift */; };
@@ -44,10 +45,13 @@
 		B38EE5E75C80D08015CAECD4 /* EnglishNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FFB9655EB04B7142AC86FC3 /* EnglishNormalizer.swift */; };
 		B4164513E05D80C1F461035E /* BackupServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28FA1200D65110A8157B9913 /* BackupServiceTests.swift */; };
 		B6EF867FAE8525BA397E5287 /* ReviewRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EAFB2259DF915CBE81E16F5 /* ReviewRepository.swift */; };
+		B87C2BB44F5CDB66C9C2F535 /* FSRS in Frameworks */ = {isa = PBXBuildFile; productRef = 474BAFA2D467DB0022AB02BE /* FSRS */; };
 		BD80FF46ED6BF4EFE5F4E731 /* SRSScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8689F99CF8D4D26871F4A62 /* SRSScheduler.swift */; };
 		BE7498FFBA27C32CB0C4F1C4 /* WordLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49427814308BD1308C8C5968 /* WordLibraryView.swift */; };
 		C2C7D74EDA0B3D3F6CB5044A /* SRSSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF458C00F6756F0F5F254731 /* SRSSchedulerTests.swift */; };
 		C52142813B8C26985782D412 /* WordMemoryCards.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 0C8AA42D52FB7F5FC04947E7 /* WordMemoryCards.xcdatamodeld */; };
+		C9F13E17DBEC179FE66E0EDB /* FSRSMigrationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4190D1466720DB32DE3B359C /* FSRSMigrationServiceTests.swift */; };
+		CA32FF5E550AE7E7B531581B /* FSRSMigrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6910F32AC9A282DDF2F2D356 /* FSRSMigrationService.swift */; };
 		CB69E7E9FFAE227E18A27FCA /* ImportAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF1C00DC170C8E32183BAC14 /* ImportAnalyzer.swift */; };
 		D370A3B6DCB1EDED18B2FCFC /* AddWordsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D71E4A8CAE3BCC0B2087C87 /* AddWordsViewModel.swift */; };
 		EF258DB55AB52F82DE54F256 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4529C52998A2DDA796D32706 /* RootView.swift */; };
@@ -90,6 +94,7 @@
 		36CB8A20B75D32F1EE4E7315 /* ReviewQueueBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewQueueBuilder.swift; sourceTree = "<group>"; };
 		3D6D8912B636A598D39720A2 /* VocabularyRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocabularyRepository.swift; sourceTree = "<group>"; };
 		3D71E4A8CAE3BCC0B2087C87 /* AddWordsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddWordsViewModel.swift; sourceTree = "<group>"; };
+		4190D1466720DB32DE3B359C /* FSRSMigrationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FSRSMigrationServiceTests.swift; sourceTree = "<group>"; };
 		4529C52998A2DDA796D32706 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		47F4A66232C99239573F5475 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		49427814308BD1308C8C5968 /* WordLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordLibraryView.swift; sourceTree = "<group>"; };
@@ -99,6 +104,7 @@
 		6187F7FD1B780ABC8041B2BC /* ReviewRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRepositoryTests.swift; sourceTree = "<group>"; };
 		63BAAFC284083B7E7371FBA9 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
 		63C5FCABFA647DE112054FAD /* LearningProgressResetService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningProgressResetService.swift; sourceTree = "<group>"; };
+		6910F32AC9A282DDF2F2D356 /* FSRSMigrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FSRSMigrationService.swift; sourceTree = "<group>"; };
 		6C9FFFE7D6CE8ADF7F279184 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		6EAFB2259DF915CBE81E16F5 /* ReviewRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRepository.swift; sourceTree = "<group>"; };
 		72516E3623EF8247610ED75A /* WordMemoryCardsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordMemoryCardsApp.swift; sourceTree = "<group>"; };
@@ -115,7 +121,7 @@
 		CA955BF497B609FFC12D2C03 /* SpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechService.swift; sourceTree = "<group>"; };
 		CEBB09E1087B15CAECC2852D /* ReviewDirection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDirection.swift; sourceTree = "<group>"; };
 		CF7B958C3BAC0537C1AACE12 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
-		D202CE4E9E5610CF6C532AD2 /* WordMemoryCards.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = WordMemoryCards.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D202CE4E9E5610CF6C532AD2 /* WordMemoryCards.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WordMemoryCards.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DAC4A6C732F82A233FA133B1 /* VocabularyRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocabularyRepositoryTests.swift; sourceTree = "<group>"; };
 		DD731EF631F3D93CBD02ECC3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DF1C00DC170C8E32183BAC14 /* ImportAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportAnalyzer.swift; sourceTree = "<group>"; };
@@ -127,6 +133,25 @@
 		ED21AFAF855646F3848394D0 /* WordMemoryCards.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = WordMemoryCards.xcdatamodel; sourceTree = "<group>"; };
 		EF458C00F6756F0F5F254731 /* SRSSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SRSSchedulerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		384538F5835DB15C672DD087 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5DF0ECE4ADF23DB9FFB88AA6 /* FSRS in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EAC0BD7979BA58B964510D52 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B87C2BB44F5CDB66C9C2F535 /* FSRS in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		05E9E577B05DBEB520CD04B2 /* Settings */ = {
@@ -178,6 +203,7 @@
 			children = (
 				28FA1200D65110A8157B9913 /* BackupServiceTests.swift */,
 				7D2995C1356BF20273AFF4B8 /* BackupViewModelAlertTests.swift */,
+				4190D1466720DB32DE3B359C /* FSRSMigrationServiceTests.swift */,
 				4D3379D6E2E0E6EA605BE874 /* ImportAnalyzerTests.swift */,
 				249D56A417C5539D49DE6DCB /* LearningProgressResetServiceTests.swift */,
 				EA0A88C850E50B3875DBD18D /* PersistenceControllerTests.swift */,
@@ -377,6 +403,7 @@
 		FDCCEC2F0590CC6B79BA1BDC /* SRS */ = {
 			isa = PBXGroup;
 			children = (
+				6910F32AC9A282DDF2F2D356 /* FSRSMigrationService.swift */,
 				36CB8A20B75D32F1EE4E7315 /* ReviewQueueBuilder.swift */,
 				6EAFB2259DF915CBE81E16F5 /* ReviewRepository.swift */,
 				03467B61F587488CBD37AF21 /* ReviewTask.swift */,
@@ -395,6 +422,7 @@
 			buildPhases = (
 				65154764903C9CA3EA0ABE0B /* Sources */,
 				6AC5A0AF4A80875E297C421B /* Resources */,
+				384538F5835DB15C672DD087 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -402,6 +430,7 @@
 			);
 			name = WordMemoryCards;
 			packageProductDependencies = (
+				C7D957316B1F42EBA98EE892 /* FSRS */,
 			);
 			productName = WordMemoryCards;
 			productReference = D202CE4E9E5610CF6C532AD2 /* WordMemoryCards.app */;
@@ -430,6 +459,7 @@
 			buildConfigurationList = 45B6201958DD48114CD8B94E /* Build configuration list for PBXNativeTarget "WordMemoryCardsTests" */;
 			buildPhases = (
 				1E9494E10F80711F050F3100 /* Sources */,
+				EAC0BD7979BA58B964510D52 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -438,6 +468,7 @@
 			);
 			name = WordMemoryCardsTests;
 			packageProductDependencies = (
+				474BAFA2D467DB0022AB02BE /* FSRS */,
 			);
 			productName = WordMemoryCardsTests;
 			productReference = 74C00780183F2A96810B951F /* WordMemoryCardsTests.xctest */;
@@ -469,6 +500,9 @@
 			);
 			mainGroup = A972683C28ED6B842E886838;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				FACD8B1C8C3E43A7C2F1D8EE /* XCRemoteSwiftPackageReference "swift-fsrs" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 97EBF737AE971E10550F50EC /* Products */;
 			projectDirPath = "";
@@ -499,6 +533,7 @@
 			files = (
 				B4164513E05D80C1F461035E /* BackupServiceTests.swift in Sources */,
 				4874790E162ED3B73312510A /* BackupViewModelAlertTests.swift in Sources */,
+				C9F13E17DBEC179FE66E0EDB /* FSRSMigrationServiceTests.swift in Sources */,
 				95580B7DF26CDFA01DA4D774 /* ImportAnalyzerTests.swift in Sources */,
 				4593DE1642EAEE82F720C151 /* LearningProgressResetServiceTests.swift in Sources */,
 				EF9A4D840D07EF26E4F31185 /* PersistenceControllerTests.swift in Sources */,
@@ -531,6 +566,7 @@
 				A49571E02F7322DAE46A84FC /* BackupViewModel.swift in Sources */,
 				581D3F7B084281C36401AB3A /* DesignSystem.swift in Sources */,
 				B38EE5E75C80D08015CAECD4 /* EnglishNormalizer.swift in Sources */,
+				CA32FF5E550AE7E7B531581B /* FSRSMigrationService.swift in Sources */,
 				7B777CC80D624183502DAEDB /* Haptics.swift in Sources */,
 				18ED16AD83317B19C6D47F15 /* HomeView.swift in Sources */,
 				CB69E7E9FFAE227E18A27FCA /* ImportAnalyzer.swift in Sources */,
@@ -602,6 +638,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 6NRFTQ7L7V;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "单词卡片";
@@ -627,6 +664,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 6NRFTQ7L7V;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "单词卡片";
@@ -866,6 +904,30 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		FACD8B1C8C3E43A7C2F1D8EE /* XCRemoteSwiftPackageReference "swift-fsrs" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/open-spaced-repetition/swift-fsrs.git";
+			requirement = {
+				kind = revision;
+				revision = 4fbaf20184d62f82a9f44f343337c61a2c5483e9;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		474BAFA2D467DB0022AB02BE /* FSRS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FACD8B1C8C3E43A7C2F1D8EE /* XCRemoteSwiftPackageReference "swift-fsrs" */;
+			productName = FSRS;
+		};
+		C7D957316B1F42EBA98EE892 /* FSRS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FACD8B1C8C3E43A7C2F1D8EE /* XCRemoteSwiftPackageReference "swift-fsrs" */;
+			productName = FSRS;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCVersionGroup section */
 		0C8AA42D52FB7F5FC04947E7 /* WordMemoryCards.xcdatamodeld */ = {

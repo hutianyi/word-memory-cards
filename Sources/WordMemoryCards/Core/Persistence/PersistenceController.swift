@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class PersistenceController: ObservableObject {
     @Published private(set) var loadErrorMessage: String?
+    @Published private(set) var isReady = false
 
     let container: NSPersistentContainer
 
@@ -17,10 +18,32 @@ final class PersistenceController: ObservableObject {
             container.persistentStoreDescriptions = [description]
         }
 
+        for description in container.persistentStoreDescriptions {
+            description.shouldMigrateStoreAutomatically = true
+            description.shouldInferMappingModelAutomatically = true
+        }
+
         container.loadPersistentStores { [weak self] _, error in
-            guard let error else { return }
-            Task { @MainActor in
-                self?.loadErrorMessage = error.localizedDescription
+            guard let self else { return }
+            if let error {
+                Task { @MainActor in
+                    self.loadErrorMessage = error.localizedDescription
+                }
+                return
+            }
+
+            let context = self.container.newBackgroundContext()
+            context.mergePolicy = NSErrorMergePolicy
+            context.undoManager = nil
+            do {
+                try context.performAndWait {
+                    _ = try FSRSMigrationService.migrateAll(in: context)
+                }
+                Task { @MainActor in self.isReady = true }
+            } catch {
+                Task { @MainActor in
+                    self.loadErrorMessage = "升级学习记录失败：\(error.localizedDescription)"
+                }
             }
         }
 

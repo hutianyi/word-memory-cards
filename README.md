@@ -10,12 +10,11 @@ backups stay on the device unless the user explicitly exports a backup file.
 ## Features
 
 - Import, edit, search, and remove user-owned vocabulary.
-- Direction-specific spaced repetition with levels 0 through 9.
+- Direction-specific FSRS-6 spaced repetition with a simple two-button review flow.
 - Same-session retry, weak-item practice, progress reports, and streaks.
 - On-device English and Chinese speech, adjustable speech rate, and haptics.
 - JSON backup and restore with validation and a safety backup before restore.
-- iPad-only SwiftUI interface, supporting portrait and landscape on iPadOS 16+
-  without third-party runtime dependencies.
+- iPad-only SwiftUI interface, supporting portrait and landscape on iPadOS 16+.
 
 ## Build and run
 
@@ -63,6 +62,10 @@ The upstream project's copyright and MIT notice are preserved in
 [LICENSE](LICENSE), with additional attribution in [NOTICE](NOTICE). The
 detailed adaptation record is in [REUSE_PLAN.md](REUSE_PLAN.md). No upstream
 TOEFL/504 word lists, screenshots, or publisher-owned material are included.
+
+Review scheduling uses the official
+[swift-fsrs](https://github.com/open-spaced-repetition/swift-fsrs) package under
+its MIT License. The dependency is pinned to a reviewed FSRS-6-capable commit.
 
 ## License
 

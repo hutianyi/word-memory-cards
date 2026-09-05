@@ -126,7 +126,7 @@ final class BackupViewModel: ObservableObject {
             try await LearningProgressResetService.reset(container: container)
             alertState = .message(
                 title: "操作完成",
-                message: "学习记录已清除。单词全部保留，两个复习方向均已回到 Level 0，并从今天重新开始。"
+                message: "学习记录已清除。单词全部保留，两个复习方向均已重置，并从今天重新开始。"
             )
         } catch {
             showError(error)

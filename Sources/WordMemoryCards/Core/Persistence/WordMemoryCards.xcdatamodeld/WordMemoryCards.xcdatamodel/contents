@@ -19,6 +19,8 @@
         <attribute name="consecutiveKnown" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="direction" optional="NO" attributeType="String"/>
+        <attribute name="fsrsCardData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="fsrsMigrationVersion" optional="NO" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="knownCount" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="lapseCount" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>

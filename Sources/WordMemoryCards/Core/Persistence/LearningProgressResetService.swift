@@ -23,6 +23,10 @@ enum LearningProgressResetService {
                 for state in try context.fetch(ReviewStateEntity.fetchRequest()) {
                     state.level = 0
                     state.nextReviewDate = dueDate
+                    state.fsrsCardData = try SRSScheduler.encodeCard(
+                        SRSScheduler.emptyCard(due: dueDate)
+                    )
+                    state.fsrsMigrationVersion = SRSScheduler.migrationVersion
                     state.lastReviewDate = nil
                     state.totalReviews = 0
                     state.knownCount = 0

@@ -193,7 +193,7 @@ struct SettingsView: View {
         case .confirmReset:
             return Alert(
                 title: Text("清除全部学习记录？"),
-                message: Text("所有单词会保留。正式复习、额外加练和 Session 记录会被清除，两个方向都重置为 Level 0 并从今天开始。清除前会自动生成本地安全备份。"),
+                message: Text("所有单词会保留。正式复习、额外加练和 Session 记录会被清除，两个方向都重置并从今天开始。清除前会自动生成本地安全备份。"),
                 primaryButton: .destructive(Text("确认清除")) {
                     Task { await backup.confirmResetLearningProgress() }
                 },

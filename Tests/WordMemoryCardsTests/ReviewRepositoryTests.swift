@@ -20,8 +20,12 @@ final class ReviewRepositoryTests: XCTestCase {
         let context = fixture.persistence.container.viewContext
         context.refresh(fixture.englishToChinese, mergeChanges: true)
         context.refresh(fixture.chineseToEnglish, mergeChanges: true)
-        XCTAssertEqual(fixture.englishToChinese.level, 6)
+        XCTAssertEqual(fixture.englishToChinese.level, 5)
         XCTAssertEqual(fixture.chineseToEnglish.level, 2)
+        XCTAssertNotEqual(
+            fixture.englishToChinese.fsrsCardData,
+            fixture.chineseToEnglish.fsrsCardData
+        )
     }
 
     @MainActor
@@ -37,6 +41,10 @@ final class ReviewRepositoryTests: XCTestCase {
             answer: .unknown,
             isSameSessionRetry: false
         )
+        let context = fixture.persistence.container.viewContext
+        context.refresh(fixture.englishToChinese, mergeChanges: true)
+        let formalCardData = fixture.englishToChinese.fsrsCardData
+        let formalDueDate = fixture.englishToChinese.nextReviewDate
         let retry = try await repository.recordAnswer(
             stateID: fixture.englishToChinese.id,
             sessionID: sessionID,
@@ -46,11 +54,12 @@ final class ReviewRepositoryTests: XCTestCase {
         )
 
         XCTAssertFalse(retry.changedFormalState)
-        XCTAssertEqual(retry.levelAfter, 2)
+        XCTAssertEqual(retry.levelAfter, 5)
 
-        let context = fixture.persistence.container.viewContext
         context.refresh(fixture.englishToChinese, mergeChanges: true)
-        XCTAssertEqual(fixture.englishToChinese.level, 2)
+        XCTAssertEqual(fixture.englishToChinese.level, 5)
+        XCTAssertEqual(fixture.englishToChinese.fsrsCardData, formalCardData)
+        XCTAssertEqual(fixture.englishToChinese.nextReviewDate, formalDueDate)
         XCTAssertEqual(fixture.englishToChinese.knownCount, 0)
         XCTAssertEqual(fixture.englishToChinese.unknownCount, 1)
     }
@@ -59,6 +68,7 @@ final class ReviewRepositoryTests: XCTestCase {
     func testExtraPracticeCreatesEventsWithoutChangingSRS() async throws {
         let fixture = try makeFixture()
         let originalDate = fixture.englishToChinese.nextReviewDate
+        let originalCardData = fixture.englishToChinese.fsrsCardData
         let repository = ReviewRepository(container: fixture.persistence.container)
         let sessionID = try await repository.startSession(mode: .extraPractice, baseTaskCount: 1)
 
@@ -76,6 +86,7 @@ final class ReviewRepositoryTests: XCTestCase {
         context.refresh(fixture.englishToChinese, mergeChanges: true)
         XCTAssertEqual(fixture.englishToChinese.level, 5)
         XCTAssertEqual(fixture.englishToChinese.nextReviewDate, originalDate)
+        XCTAssertEqual(fixture.englishToChinese.fsrsCardData, originalCardData)
         XCTAssertEqual(fixture.englishToChinese.knownCount, 0)
         XCTAssertEqual(fixture.englishToChinese.unknownCount, 0)
 
@@ -155,6 +166,10 @@ final class ReviewRepositoryTests: XCTestCase {
         state.direction = direction.rawValue
         state.level = level
         state.nextReviewDate = now
+        state.fsrsCardData = try! SRSScheduler.encodeCard(
+            SRSScheduler.emptyCard(due: now)
+        )
+        state.fsrsMigrationVersion = SRSScheduler.migrationVersion
         state.createdAt = now
         state.updatedAt = now
         state.word = word

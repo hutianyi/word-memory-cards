@@ -38,6 +38,8 @@ extension ReviewStateEntity {
     @NSManaged var consecutiveKnown: Int32
     @NSManaged var lapseCount: Int64
     @NSManaged var lastResult: String?
+    @NSManaged var fsrsCardData: Data?
+    @NSManaged var fsrsMigrationVersion: Int16
     @NSManaged var createdAt: Date
     @NSManaged var updatedAt: Date
     @NSManaged var word: WordEntity?

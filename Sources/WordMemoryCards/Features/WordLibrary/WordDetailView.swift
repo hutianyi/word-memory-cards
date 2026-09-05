@@ -28,12 +28,11 @@ struct WordDetailView: View {
             } header: {
                 Text("词条")
             } footer: {
-                Text("修改中文不会改变两个方向的复习等级和历史。")
+                Text("修改中文不会改变两个方向的复习进度和历史。")
             }
 
             ForEach(sortedStates, id: \.objectID) { state in
                 Section(directionTitle(state.direction)) {
-                    LabeledContent("Level", value: "\(state.level)")
                     LabeledContent("下次复习", value: state.nextReviewDate.formatted(date: .abbreviated, time: .omitted))
                     LabeledContent("正式认识", value: "\(state.knownCount)")
                     LabeledContent("正式不认识", value: "\(state.unknownCount)")

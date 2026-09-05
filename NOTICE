@@ -19,3 +19,8 @@ available in REUSE_PLAN.md.
 The upstream TOEFL / 504 vocabulary lists, bundled content, screenshots, and
 publisher-owned source material are not included in WordMemoryCards. Users
 provide and retain ownership of their own vocabulary content.
+
+FSRS scheduling is provided by swift-fsrs:
+Repository: https://github.com/open-spaced-repetition/swift-fsrs
+Copyright (c) 2023 Ben Smiley
+License: MIT

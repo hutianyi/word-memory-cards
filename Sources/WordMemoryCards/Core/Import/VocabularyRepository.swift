@@ -71,6 +71,10 @@ final class VocabularyRepository {
                         state.direction = direction.rawValue
                         state.level = 0
                         state.nextReviewDate = startOfToday
+                        state.fsrsCardData = try SRSScheduler.encodeCard(
+                            SRSScheduler.emptyCard(due: startOfToday)
+                        )
+                        state.fsrsMigrationVersion = SRSScheduler.migrationVersion
                         state.createdAt = now
                         state.updatedAt = now
                         state.word = word

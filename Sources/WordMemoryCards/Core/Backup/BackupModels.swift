@@ -3,7 +3,7 @@ import Foundation
 struct BackupEnvelope: Codable {
     static let appMarker = "WordMemoryCards"
     static let currentBackupFormatVersion = 1
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     let app: String
     let backupFormatVersion: Int
@@ -43,6 +43,8 @@ struct BackupReviewState: Codable {
     let consecutiveKnown: Int32
     let lapseCount: Int64
     let lastResult: String?
+    let fsrsCardData: Data?
+    let fsrsMigrationVersion: Int16?
     let createdAt: Date
     let updatedAt: Date
 }

@@ -3919,10 +3919,10 @@ iPadOS 16.7.16 兼容
 
 ## 62.1 当前状态
 
-- 最后更新：2026-09-01
+- 最后更新：2026-09-05
 - 当前模型：GPT-5.6 Sol，High
-- 当前阶段：Phase 0–7 功能实现完成；GitHub 公开版已发布
-- 总体状态：核心实现、公开发布材料与首次 push 均已验证
+- 当前阶段：FSRS-6 调度升级已完成，等待真机验收
+- 总体状态：固定 Level 正式排期已替换；旧历史迁移、备份兼容、自动化测试和 Simulator build 均已验证
 - 当前阻塞：无功能阻塞
 
 ## 62.2 已完成节点
@@ -4031,6 +4031,21 @@ iPadOS 16.7.16 兼容
 - 已创建公开仓库：<https://github.com/hutianyi/word-memory-cards>；已设为本地 `origin`，首次源码提交与 push 待执行。
 - 首次公开提交：`0952430`（`Initial public release`）已于 2026-09-01 推送至 `main`，仓库地址为 <https://github.com/hutianyi/word-memory-cards>。
 
+### 2026-09-05 — FSRS-6 调度升级完成
+
+- 从官方 `open-spaced-repetition/swift-fsrs` 当前源码确认：默认 19 权重是 FSRS-5，必须显式使用 21 权重 `FSRSDefaults.defaultWv6` 才是 FSRS-6。
+- XcodeGen `project.yml` 已固定官方依赖到提交 `4fbaf20184d62f82a9f44f343337c61a2c5483e9`，重新生成工程后依赖仍存在；`Package.resolved` 已纳入工程工作区。
+- 调度参数：目标保留率 0.92，最大间隔 3650 天，fuzz 关闭，使用 FSRS-6 官方默认权重，不做个人参数训练。
+- 库内 short-term steps 关闭：App 已有独立的当天 same-session retry；若保留库默认 1m/10m 学习步骤，新卡 Good 会在 10 分钟后再次到期，与“第二天不强制全部出现”的产品要求冲突。关闭后仍使用 FSRS-6 长期数学调度。
+- `认识` 仅映射 `.good`，`不认识` 仅映射 `.again`；旧 Level 字段仅保留数据兼容，不再参与 nextReviewDate 或队列排序。
+- Core Data 的每个方向状态新增 `fsrsCardData` 和 `fsrsMigrationVersion`；完整保存官方 `Card` 状态，两个方向互不影响。
+- 旧数据首次加载时按时间顺序 replay scheduled 首答：known→Good，unknown→Again；排除 same-session retry 和 Extra Practice。每卡迁移版本标记保证不重复执行，无可用历史时安全初始化为新卡。
+- scheduled 首次作答才会更新正式 FSRS Card/due；retry 和 Extra Practice 仅保留事件与 Session 统计，不修改正式调度。
+- 备份 schema 升为 2，新备份保存 FSRS Card，仍允许读取 schema 1 旧备份并在恢复后从历史迁移。
+- 用户界面仍只显示“认识 / 不认识”，移除 Level 展示；熟练统计改为两方向均有正式复习且下次日期至少在 30 天后。
+- 新增/更新自动化覆盖：FSRS-6 配置、Good/Again 映射、动态增长、Again lapse、retry/Extra 隔离、双方向隔离、迁移幂等、未到期过滤、20 词/40 方向次日不全部出现。
+- iPad (A16) / iOS Simulator 26.5 串行完整测试通过：33 个单元测试 + 2 个 UI 冒烟测试，共 35/35；`xcodebuild test` 退出码 0。
+
 ## 62.3 已确认环境
 
 - Xcode：26.6（Build 17F113）。
@@ -4072,9 +4087,11 @@ iPadOS 16.7.16 兼容
 - Physical UI XCTest：Xcode 26 对该 iPadOS 16 真机仍报告 `Logic Testing Unavailable`；UI 测试与逻辑测试都保留到 Simulator 执行。
 - Latest verification：App 真机签名构建、App + 逻辑测试 + UI 测试的 Simulator `build-for-testing` 均成功。
 - Open-source release verification：`xcodebuild test -parallel-testing-enabled NO` 在 iPad (A16) / iOS Simulator 26.5 实际通过 31/31；`git diff --check` 与敏感信息扫描已通过，首次公开提交 `0952430` 已推送到 `origin/main`。
+- FSRS-6 verification：重新生成 Xcode 工程后，官方依赖解析为 `4fbaf20`；iPad (A16) / iOS Simulator 26.5 串行通过 33 个单元测试和 2 个 UI 测试，独立 `xcodebuild build` 与 `git diff --check` 均通过。
 
 ## 62.6 下一步
 
 1. 在 Xcode 的 Signing & Capabilities 选择用户的 Personal Team，并确认已连接 iPad 处于解锁、信任和 Developer Mode 可用状态。
 2. 安装到 iPad 第五代，完成导入、双向复习、retry、退出、统计、Extra Practice、备份 round-trip 的端到端验收。
 3. 真机专项验证 Zoe / 语舒、语速切换、连续快速点按、音频路由变化、App 前后台与旧设备 TTS fallback。
+4. 用当前真机数据首次启动 FSRS-6 版，确认旧 scheduled 首答迁移后单词、计数和历史保留，并观察次日到期数。

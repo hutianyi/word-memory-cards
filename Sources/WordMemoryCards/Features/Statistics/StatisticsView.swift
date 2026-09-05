@@ -90,7 +90,7 @@ struct StatisticsView: View {
                                                 .foregroundStyle(AppPalette.textSecondary)
                                         }
                                         Spacer()
-                                        Text("Level \(state.level)")
+                                        Text(state.nextReviewDate.formatted(date: .abbreviated, time: .omitted))
                                             .font(.subheadline.monospacedDigit())
                                             .foregroundStyle(AppPalette.textSecondary)
                                         Image(systemName: "chevron.right")
@@ -145,10 +145,13 @@ struct StatisticsView: View {
     }
 
     private var masteredWordCount: Int {
-        words.filter { word in
+        let threshold = calendar.date(byAdding: .day, value: 30, to: Date()) ?? Date()
+        return words.filter { word in
             let reviewStates = word.reviewStates
             return reviewStates.count == ReviewDirection.allCases.count
-                && reviewStates.allSatisfy { $0.level >= 7 }
+                && reviewStates.allSatisfy {
+                    $0.totalReviews > 0 && $0.nextReviewDate >= threshold
+                }
         }.count
     }
 

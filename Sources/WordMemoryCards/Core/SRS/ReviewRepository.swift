@@ -40,6 +40,7 @@ final class ReviewRepository {
         context.undoManager = nil
 
         return try await context.perform {
+            _ = try FSRSMigrationService.migrateAll(in: context, now: today)
             let request = ReviewStateEntity.fetchRequest()
             request.predicate = NSPredicate(format: "nextReviewDate < %@", tomorrow as NSDate)
             request.relationshipKeyPathsForPrefetching = ["word"]
@@ -52,6 +53,7 @@ final class ReviewRepository {
         context.undoManager = nil
 
         return try await context.perform {
+            _ = try FSRSMigrationService.migrateAll(in: context)
             let request = ReviewStateEntity.fetchRequest()
             request.predicate = NSPredicate(format: "unknownCount > 0")
             request.relationshipKeyPathsForPrefetching = ["word", "events"]
@@ -66,6 +68,7 @@ final class ReviewRepository {
         context.undoManager = nil
 
         return try await context.perform {
+            _ = try FSRSMigrationService.migrateAll(in: context)
             let request = ReviewStateEntity.fetchRequest()
             request.relationshipKeyPathsForPrefetching = ["word", "events"]
             return try context.fetch(request).map {
@@ -105,8 +108,6 @@ final class ReviewRepository {
         let context = container.newBackgroundContext()
         context.mergePolicy = NSErrorMergePolicy
         context.undoManager = nil
-        let schedulingCalendar = calendar
-
         return try await context.perform {
             do {
                 let state = try Self.fetchState(id: stateID, in: context)
@@ -117,21 +118,21 @@ final class ReviewRepository {
                 }
 
                 let levelBefore = Int(state.level)
-                var levelAfter = levelBefore
+                let levelAfter = levelBefore
                 var nextReviewDate = state.nextReviewDate
                 let changesFormalState = mode == .scheduled && !isSameSessionRetry
 
                 if changesFormalState {
-                    let decision = SRSScheduler.decision(
-                        level: levelBefore,
+                    _ = try FSRSMigrationService.migrate(state, now: reviewedAt)
+                    let decision = try SRSScheduler.decision(
+                        cardData: state.fsrsCardData,
                         answer: answer,
-                        date: reviewedAt,
-                        calendar: schedulingCalendar
+                        date: reviewedAt
                     )
-                    levelAfter = decision.newLevel
                     nextReviewDate = decision.nextReviewDate
 
-                    state.level = Int16(levelAfter)
+                    state.fsrsCardData = decision.cardData
+                    state.fsrsMigrationVersion = SRSScheduler.migrationVersion
                     state.nextReviewDate = nextReviewDate
                     state.lastReviewDate = reviewedAt
                     state.totalReviews += 1

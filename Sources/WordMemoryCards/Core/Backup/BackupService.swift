@@ -34,6 +34,7 @@ enum BackupService {
         context.undoManager = nil
 
         let body: BackupData = try await context.perform {
+            _ = try FSRSMigrationService.migrateAll(in: context)
             let words = try context.fetch(WordEntity.fetchRequest()).map {
                 BackupWord(
                     id: $0.id,
@@ -62,6 +63,8 @@ enum BackupService {
                     consecutiveKnown: state.consecutiveKnown,
                     lapseCount: state.lapseCount,
                     lastResult: state.lastResult,
+                    fsrsCardData: state.fsrsCardData,
+                    fsrsMigrationVersion: state.fsrsMigrationVersion,
                     createdAt: state.createdAt,
                     updatedAt: state.updatedAt
                 )
@@ -145,7 +148,7 @@ enum BackupService {
         guard envelope.backupFormatVersion == BackupEnvelope.currentBackupFormatVersion else {
             throw BackupError.unsupportedFormat(envelope.backupFormatVersion)
         }
-        guard envelope.schemaVersion == BackupEnvelope.currentSchemaVersion else {
+        guard (1...BackupEnvelope.currentSchemaVersion).contains(envelope.schemaVersion) else {
             throw BackupError.unsupportedSchema(envelope.schemaVersion)
         }
 
@@ -176,6 +179,11 @@ enum BackupService {
                   state.knownCount >= 0,
                   state.unknownCount >= 0 else {
                 throw BackupError.invalidData("复习状态的方向、Level 或计数无效")
+            }
+            if let cardData = state.fsrsCardData {
+                guard (try? SRSScheduler.decodeCard(cardData)) != nil else {
+                    throw BackupError.invalidData("复习状态中的调度数据无效")
+                }
             }
             let key = "\(state.wordID.uuidString)|\(state.direction)"
             guard stateKeys.insert(key).inserted else {
@@ -275,6 +283,8 @@ enum BackupService {
                     state.consecutiveKnown = item.consecutiveKnown
                     state.lapseCount = item.lapseCount
                     state.lastResult = item.lastResult
+                    state.fsrsCardData = item.fsrsCardData
+                    state.fsrsMigrationVersion = item.fsrsMigrationVersion ?? 0
                     state.createdAt = item.createdAt
                     state.updatedAt = item.updatedAt
                     states[item.id] = state
@@ -321,6 +331,8 @@ enum BackupService {
                     event.wordEnglishSnapshot = item.wordEnglishSnapshot
                     event.wordChineseSnapshot = item.wordChineseSnapshot
                 }
+
+                _ = try FSRSMigrationService.migrateAll(in: context)
 
                 try context.save()
             } catch {

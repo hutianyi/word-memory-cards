@@ -7,11 +7,19 @@ struct RootView: View {
     @EnvironmentObject private var persistence: PersistenceController
 
     var body: some View {
-        NavigationStack(path: $router.path) {
-            HomeView()
-                .navigationDestination(for: AppRoute.self) { route in
-                    destination(for: route)
+        Group {
+            if persistence.isReady {
+                NavigationStack(path: $router.path) {
+                    HomeView()
+                        .navigationDestination(for: AppRoute.self) { route in
+                            destination(for: route)
+                        }
                 }
+            } else {
+                ProgressView("正在准备学习记录…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AppPalette.background.ignoresSafeArea())
+            }
         }
         .alert("无法打开本地数据库", isPresented: loadErrorBinding) {
             Button("好", role: .cancel) {}
