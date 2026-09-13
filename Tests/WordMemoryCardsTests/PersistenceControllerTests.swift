@@ -4,6 +4,36 @@ import XCTest
 
 final class PersistenceControllerTests: XCTestCase {
     @MainActor
+    func testPreviousStoreMigratesWithoutLosingWords() throws {
+        let bundle = Bundle(for: WordEntity.self)
+        let modelDirectory = try XCTUnwrap(bundle.url(forResource: "WordMemoryCards", withExtension: "momd"))
+        let oldModel = try XCTUnwrap(NSManagedObjectModel(contentsOf: modelDirectory.appendingPathComponent("WordMemoryCards.mom")))
+        let newModel = PersistenceController(inMemory: true).container.managedObjectModel
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".sqlite")
+        let originalID = UUID()
+        let oldCoordinator = NSPersistentStoreCoordinator(managedObjectModel: oldModel)
+        let oldStore = try oldCoordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: url)
+        let oldContext = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        oldContext.persistentStoreCoordinator = oldCoordinator
+        let word = NSEntityDescription.insertNewObject(forEntityName: "WordEntity", into: oldContext)
+        word.setValuesForKeys(["id": originalID, "english": "zebra", "normalizedEnglish": "zebra",
+                              "chinese": "斑马", "createdAt": Date(), "updatedAt": Date()])
+        try oldContext.save()
+        oldContext.reset()
+        try oldCoordinator.remove(oldStore)
+        let newCoordinator = NSPersistentStoreCoordinator(managedObjectModel: newModel)
+        _ = try newCoordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: url,
+            options: [NSMigratePersistentStoresAutomaticallyOption: true, NSInferMappingModelAutomaticallyOption: true])
+        let context = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        context.persistentStoreCoordinator = newCoordinator
+        let restored = try XCTUnwrap(context.fetch(WordEntity.fetchRequest()).first)
+        XCTAssertEqual(restored.id, originalID)
+        XCTAssertEqual(restored.english, "zebra")
+        XCTAssertEqual(restored.importPosition, 0)
+        try newCoordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType)
+    }
+
+    @MainActor
     func testModelContainsTheFourRequiredEntities() {
         let persistence = PersistenceController(inMemory: true)
         let names = Set(persistence.container.managedObjectModel.entities.compactMap(\.name))

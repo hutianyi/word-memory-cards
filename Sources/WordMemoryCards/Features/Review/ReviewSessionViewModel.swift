@@ -76,7 +76,7 @@ final class ReviewSessionViewModel: ObservableObject {
                 states = try await repository.dueStates()
                 queue = ReviewQueueBuilder.buildBaseQueue(
                     from: states,
-                    sessionLimit: sessionLimit,
+                    sessionLimit: nil,
                     today: Date()
                 )
             case .extraPractice:

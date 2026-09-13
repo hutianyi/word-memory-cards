@@ -12,6 +12,7 @@ extension WordEntity {
     @NSManaged var id: UUID
     @NSManaged var english: String
     @NSManaged var normalizedEnglish: String
+    @NSManaged var importPosition: Int64
     @NSManaged var chinese: String
     @NSManaged var createdAt: Date
     @NSManaged var updatedAt: Date

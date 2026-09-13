@@ -12,7 +12,7 @@ enum BackupService {
         var errorDescription: String? {
             switch self {
             case .wrongApp:
-                return "这不是单词卡片 App 的备份文件。"
+                return "这不是简单记 App 的备份文件。"
             case .unsupportedFormat(let version):
                 return "不支持这个备份格式版本（\(version)）。"
             case .unsupportedSchema(let version):
@@ -41,6 +41,7 @@ enum BackupService {
                     english: $0.english,
                     normalizedEnglish: $0.normalizedEnglish,
                     chinese: $0.chinese,
+                    importPosition: $0.importPosition,
                     createdAt: $0.createdAt,
                     updatedAt: $0.updatedAt
                 )
@@ -260,6 +261,7 @@ enum BackupService {
                     word.english = item.english
                     word.normalizedEnglish = item.normalizedEnglish
                     word.chinese = item.chinese
+                    word.importPosition = item.importPosition ?? 0
                     word.createdAt = item.createdAt
                     word.updatedAt = item.updatedAt
                     words[item.id] = word

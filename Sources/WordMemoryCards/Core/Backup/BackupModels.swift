@@ -26,6 +26,7 @@ struct BackupWord: Codable {
     let english: String
     let normalizedEnglish: String
     let chinese: String
+    let importPosition: Int64?
     let createdAt: Date
     let updatedAt: Date
 }

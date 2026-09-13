@@ -51,7 +51,7 @@ final class VocabularyRepository {
                 var inserted = 0
                 var skipped = 0
 
-                for entry in entries {
+                for (position, entry) in entries.enumerated() {
                     guard !alreadyPresent.contains(entry.normalizedEnglish) else {
                         skipped += 1
                         continue
@@ -62,6 +62,7 @@ final class VocabularyRepository {
                     word.english = entry.english.trimmingCharacters(in: .whitespacesAndNewlines)
                     word.normalizedEnglish = entry.normalizedEnglish
                     word.chinese = entry.chinese.trimmingCharacters(in: .whitespacesAndNewlines)
+                    word.importPosition = Int64(position)
                     word.createdAt = now
                     word.updatedAt = now
 

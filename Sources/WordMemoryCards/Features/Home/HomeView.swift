@@ -29,7 +29,7 @@ struct HomeView: View {
             VStack(spacing: 28) {
                 Spacer(minLength: 30)
 
-                Text("单词卡片")
+                Text("简单记")
                     .font(.system(.largeTitle, design: .rounded, weight: .bold))
                     .foregroundStyle(AppPalette.textPrimary)
 

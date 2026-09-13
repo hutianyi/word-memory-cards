@@ -53,7 +53,7 @@
 
 ## Phase 1 骨架决策
 
-- App：`WordMemoryCards`；显示名称：`单词卡片`。
+- App：`WordMemoryCards`（内部工程/模块名）；显示名称：`简单记`。
 - Bundle ID：`com.hutianyi.WordMemoryCards`。
 - 最低系统：iOS / iPadOS 16.0；设备族：iPad only（`TARGETED_DEVICE_FAMILY = 2`）。
 - SwiftUI 使用 iOS 16 可用的 `ObservableObject`、`@StateObject` 和 `NavigationStack`。

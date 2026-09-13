@@ -36,11 +36,22 @@ final class BackupServiceTests: XCTestCase {
         let sessions = try context.fetch(StudySessionEntity.fetchRequest())
 
         XCTAssertEqual(words.map(\.id), [fixture.wordID])
+        XCTAssertEqual(words.first?.importPosition, 7)
         XCTAssertEqual(states.count, 2)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events.first?.word?.id, fixture.wordID)
         XCTAssertEqual(events.first?.reviewState.id, fixture.stateID)
         XCTAssertEqual(sessions.map(\.id), [fixture.sessionID])
+    }
+
+    func testLegacyBackupWordDecodesWithoutImportPosition() throws {
+        let word = BackupWord(id: UUID(), english: "apple", normalizedEnglish: "apple",
+                              chinese: "苹果", importPosition: 7, createdAt: Date(), updatedAt: Date())
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(word)) as? [String: Any])
+        json.removeValue(forKey: "importPosition")
+        let decoded = try JSONDecoder().decode(BackupWord.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(decoded.importPosition)
+        XCTAssertEqual(decoded.id, word.id)
     }
 
     func testRejectsWrongAppMarkerBeforeRestore() async throws {
@@ -82,6 +93,7 @@ final class BackupServiceTests: XCTestCase {
         word.english = "apple"
         word.normalizedEnglish = "apple"
         word.chinese = "苹果"
+        word.importPosition = 7
         word.createdAt = now
         word.updatedAt = now
 

@@ -6,7 +6,7 @@ final class WordMemoryCardsSmokeUITests: XCTestCase {
         app.launchArguments = ["--ui-testing"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["单词卡片"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["简单记"].waitForExistence(timeout: 8))
         app.buttons["home.addWords"].tap()
 
         XCTAssertTrue(app.navigationBars["添加单词"].waitForExistence(timeout: 5))
@@ -36,7 +36,7 @@ final class WordMemoryCardsSmokeUITests: XCTestCase {
         app.launchArguments = ["--ui-testing"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["单词卡片"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["简单记"].waitForExistence(timeout: 8))
         app.buttons["设置"].tap()
         XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
 

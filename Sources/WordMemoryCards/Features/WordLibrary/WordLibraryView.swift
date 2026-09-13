@@ -27,6 +27,8 @@ private struct WordLibraryResults: View {
 
         _words = FetchRequest(
             sortDescriptors: [
+                NSSortDescriptor(keyPath: \WordEntity.createdAt, ascending: false),
+                NSSortDescriptor(keyPath: \WordEntity.importPosition, ascending: true),
                 NSSortDescriptor(keyPath: \WordEntity.normalizedEnglish, ascending: true)
             ],
             predicate: predicate,

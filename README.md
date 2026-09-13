@@ -1,4 +1,6 @@
-# WordMemoryCards
+# 简单记
+
+`WordMemoryCards` 是本项目保留的内部工程、模块和数据容器名称；App 对用户显示为“简单记”。
 
 An offline, iPad-first vocabulary flashcard app for family learning. Import a
 simple Markdown or plain-text word list, then let the app schedule two
@@ -46,7 +48,7 @@ UI-test runner launches when scheduled concurrently.
 
 ## Privacy
 
-WordMemoryCards has no account system, analytics, advertising SDK, server API,
+简单记 has no account system, analytics, advertising SDK, server API,
 or bundled vocabulary corpus. The content you add and your learning history are
 stored locally in the app's Core Data database. Exported backups are ordinary
 files that you choose where to save and share.
@@ -69,5 +71,5 @@ its MIT License. The dependency is pinned to a reviewed FSRS-6-capable commit.
 
 ## License
 
-WordMemoryCards is distributed under the MIT License. See [LICENSE](LICENSE)
+简单记 is distributed under the MIT License. See [LICENSE](LICENSE)
 and [NOTICE](NOTICE).

@@ -18,6 +18,44 @@ final class ReviewQueueBuilderTests: XCTestCase {
         XCTAssertFalse(queue.contains { $0.state.english == "future" })
     }
 
+    func testUnlimitedQueueIncludesAll150DueCards() {
+        let due = (0..<150).map { state("word\($0)", dueOffset: -1) }
+        let queue = ReviewQueueBuilder.buildBaseQueue(
+            from: due + [state("future", dueOffset: 10)],
+            sessionLimit: nil,
+            today: today
+        )
+
+        XCTAssertEqual(queue.count, 150)
+        XCTAssertEqual(Set(queue.map { $0.state.id }), Set(due.map(\.id)))
+    }
+
+    @MainActor
+    func testScheduledSessionIgnoresLegacyThirtyCardLimit() async throws {
+        let persistence = PersistenceController(inMemory: true)
+        let repository = VocabularyRepository(container: persistence.container)
+        let words = (0..<80).map { "word\($0) 释义" }.joined(separator: "\n")
+        let analysis = try await repository.analyze(VocabularyParser.parse(words))
+        _ = try await repository.importAdditions(analysis.additions)
+        let session = ReviewSessionViewModel(
+            container: persistence.container,
+            mode: .scheduled,
+            sessionLimit: 30
+        )
+
+        await session.start()
+        XCTAssertEqual(session.baseTaskCount, 160)
+        for _ in 0..<160 {
+            session.reveal()
+            await session.answer(.known)
+        }
+        guard case .summary(let summary) = session.phase else {
+            return XCTFail("All cards should finish in one session")
+        }
+        XCTAssertEqual(summary.answered, 160)
+        XCTAssertEqual(summary.remainingDue, 0)
+    }
+
     func testMoreOverdueComesFirst() {
         let queue = ReviewQueueBuilder.buildBaseQueue(
             from: [state("today", dueOffset: 0), state("late", dueOffset: -8)],

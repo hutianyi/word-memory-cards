@@ -2,6 +2,7 @@ import CoreData
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 struct BackupDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
@@ -63,7 +64,41 @@ final class BackupViewModel: ObservableObject {
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
-        return "WordMemoryCards-Backup-\(formatter.string(from: Date()))"
+        return "简单记-Backup-\(formatter.string(from: Date()))"
+    }
+
+    func copyAllEnglish() async {
+        guard !isBusy else { return }
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let context = container.newBackgroundContext()
+            let entries: [String] = try await context.perform {
+                let request = WordEntity.fetchRequest()
+                request.sortDescriptors = [
+                    NSSortDescriptor(keyPath: \WordEntity.createdAt, ascending: false),
+                    NSSortDescriptor(keyPath: \WordEntity.importPosition, ascending: true),
+                    NSSortDescriptor(keyPath: \WordEntity.normalizedEnglish, ascending: true)
+                ]
+                return try context.fetch(request).map { word in
+                    word.english.components(separatedBy: .newlines)
+                        .map { $0.trimmingCharacters(in: .whitespaces) }
+                        .filter { !$0.isEmpty }
+                        .joined(separator: " ")
+                }
+            }
+            guard !entries.isEmpty else {
+                alertState = .message(title: "词库为空", message: "还没有可复制的英文单词或词组。")
+                return
+            }
+            UIPasteboard.general.string = entries.joined(separator: "\n")
+            alertState = .message(
+                title: "已复制",
+                message: "已将 \(entries.count) 个英文单词或词组复制到剪贴板，一行一个。"
+            )
+        } catch {
+            alertState = .message(title: "复制失败", message: error.localizedDescription)
+        }
     }
 
     func prepareExport() async {

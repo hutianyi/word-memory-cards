@@ -22,14 +22,11 @@ struct ReviewSessionView: View {
         self.settings = settings
         self.speech = speech
         self.mode = mode
-        let resolvedLimit = sessionLimit ?? (settings.sessionLimit.rawValue == 0
-            ? nil
-            : settings.sessionLimit.rawValue)
         _viewModel = StateObject(
             wrappedValue: ReviewSessionViewModel(
                 container: container,
                 mode: mode,
-                sessionLimit: resolvedLimit,
+                sessionLimit: sessionLimit,
                 extraPracticeScope: extraPracticeScope
             )
         )

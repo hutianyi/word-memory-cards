@@ -23,11 +23,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                Picker("每轮最多复习", selection: $settings.sessionLimit) {
-                    ForEach(SessionLimitOption.allCases) { option in
-                        Text(option.title).tag(option)
-                    }
-                }
+                Text("正式复习不限制每轮卡片数量")
 
                 Picker("额外加练范围", selection: $settings.extraPracticeScope) {
                     ForEach(ExtraPracticeScope.allCases) { scope in
@@ -93,6 +89,10 @@ struct SettingsView: View {
             }
 
             Section {
+                Button("复制全部英文到剪贴板") {
+                    Task { await backup.copyAllEnglish() }
+                }
+                .accessibilityIdentifier("settings.copyAllEnglish")
                 Button("导出完整备份") {
                     Task { await backup.prepareExport() }
                 }
@@ -107,7 +107,7 @@ struct SettingsView: View {
             } header: {
                 Text("数据管理")
             } footer: {
-                Text("恢复前会先校验完整文件，并自动保存当前数据的安全备份。")
+                Text("复制英文：按词库顺序，一行一个单词或词组。完整备份为 JSON 格式，包含词库、学习记录和设置；恢复前会先校验，并自动保存当前数据的安全备份。")
             }
 
             Section {
