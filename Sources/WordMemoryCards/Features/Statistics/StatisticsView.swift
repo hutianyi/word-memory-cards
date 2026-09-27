@@ -12,6 +12,10 @@ struct StatisticsView: View {
     private var events: FetchedResults<ReviewEventEntity>
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \StudySessionEntity.startedAt, ascending: false)])
     private var sessions: FetchedResults<StudySessionEntity>
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(key: "createdAt", ascending: false)])
+    private var dictationDays: FetchedResults<DictationDayEntity>
+    @FetchRequest(sortDescriptors: [])
+    private var dictationEvents: FetchedResults<DictationEventEntity>
 
     private let calendar = Calendar.current
 
@@ -27,6 +31,8 @@ struct StatisticsView: View {
                     metric("已熟练单词", value: masteredWordCount, symbol: "star.fill")
                     metric("今日已正式复习", value: todayFormalEvents.count, symbol: "checkmark.circle")
                     metric("今日首答正确率", value: todayAccuracyText, symbol: "percent")
+                    metric("今日默写首次正确率", value: todayDictationAccuracyText, symbol: "pencil")
+                    metric("旧词摸底首次正确", value: baselineAccuracyText, symbol: "list.clipboard")
                     metric("连续学习天数", value: "\(studyStreak) 天", symbol: "flame.fill")
                     metric("累计正式复习次数", value: formalEvents.count, symbol: "arrow.triangle.2.circlepath")
                     metric("累计不认识次数", value: formalUnknownCount, symbol: "xmark.circle")
@@ -142,6 +148,25 @@ struct StatisticsView: View {
     private var dueCount: Int {
         let today = calendar.startOfDay(for: Date())
         return states.filter { calendar.startOfDay(for: $0.nextReviewDate) <= today }.count
+    }
+
+    private var todayDictationAccuracyText: String {
+        let key = DictationEligibility.dayKey(for: Date())
+        guard let day = dictationDays.first(where: { $0.dayKey == key }),
+              let items = try? JSONDecoder().decode([DictationItem].self, from: day.tasksData) else {
+            return "暂无"
+        }
+        let answered = items.filter { $0.formalResult != nil }.count
+        guard answered > 0 else { return "暂无" }
+        let correct = items.filter { $0.formalResult == true }.count
+        return "\(Int((Double(correct) / Double(answered) * 100).rounded()))%"
+    }
+
+    private var baselineAccuracyText: String {
+        let firstResults = dictationEvents.filter { $0.kind == "baselineFormal" }
+        guard !firstResults.isEmpty else { return "暂无" }
+        let correct = firstResults.filter { $0.result == "correct" }.count
+        return "\(correct) / \(firstResults.count)"
     }
 
     private var masteredWordCount: Int {

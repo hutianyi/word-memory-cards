@@ -34,14 +34,54 @@ final class PersistenceControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testModelContainsTheFourRequiredEntities() {
+    func testModelContainsCardAndDictationEntities() {
         let persistence = PersistenceController(inMemory: true)
         let names = Set(persistence.container.managedObjectModel.entities.compactMap(\.name))
 
         XCTAssertEqual(
             names,
-            ["WordEntity", "ReviewStateEntity", "ReviewEventEntity", "StudySessionEntity"]
+            ["WordEntity", "ReviewStateEntity", "ReviewEventEntity", "StudySessionEntity",
+             "DictationStateEntity", "DictationDayEntity", "DictationEventEntity"]
         )
+    }
+
+    @MainActor
+    func testV2StoreMigratesToV3WithoutLosingCardProgress() throws {
+        let bundle = Bundle(for: WordEntity.self)
+        let directory = try XCTUnwrap(bundle.url(forResource: "WordMemoryCards", withExtension: "momd"))
+        let v2 = try XCTUnwrap(NSManagedObjectModel(
+            contentsOf: directory.appendingPathComponent("WordMemoryCardsV2.mom")
+        ))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".sqlite")
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: v2)
+        let oldStore = try coordinator.addPersistentStore(ofType: NSSQLiteStoreType, configurationName: nil, at: url)
+        let context = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        context.persistentStoreCoordinator = coordinator
+        let wordID = UUID()
+        let word = NSEntityDescription.insertNewObject(forEntityName: "WordEntity", into: context)
+        word.setValuesForKeys([
+            "id": wordID, "english": "zebra", "normalizedEnglish": "zebra",
+            "chinese": "斑马", "importPosition": 7, "createdAt": Date(), "updatedAt": Date()
+        ])
+        try context.save()
+        context.reset()
+        try coordinator.remove(oldStore)
+
+        let v3 = PersistenceController(inMemory: true).container.managedObjectModel
+        let migratedCoordinator = NSPersistentStoreCoordinator(managedObjectModel: v3)
+        _ = try migratedCoordinator.addPersistentStore(
+            ofType: NSSQLiteStoreType, configurationName: nil, at: url,
+            options: [NSMigratePersistentStoresAutomaticallyOption: true,
+                      NSInferMappingModelAutomaticallyOption: true]
+        )
+        let migrated = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        migrated.persistentStoreCoordinator = migratedCoordinator
+        let restored = try XCTUnwrap(migrated.fetch(WordEntity.fetchRequest()).first)
+        XCTAssertEqual(restored.id, wordID)
+        XCTAssertEqual(restored.importPosition, 7)
+        XCTAssertNil(restored.dictationState)
+        XCTAssertEqual(try migrated.count(for: DictationDayEntity.fetchRequest()), 0)
+        try migratedCoordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType)
     }
 
     @MainActor

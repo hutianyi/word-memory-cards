@@ -3,13 +3,24 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var router: AppRouter
+    @ObservedObject var settings: SettingsStore
 
     @FetchRequest private var dueStates: FetchedResults<ReviewStateEntity>
     @FetchRequest private var words: FetchedResults<WordEntity>
+    @FetchRequest(sortDescriptors: []) private var dictationStates: FetchedResults<DictationStateEntity>
+    @FetchRequest(sortDescriptors: []) private var dictationDays: FetchedResults<DictationDayEntity>
+    @FetchRequest(sortDescriptors: []) private var dictationEvents: FetchedResults<DictationEventEntity>
+    private let today: String
+    private let startOfToday: Date
+    private let tomorrow: Date
 
-    init(calendar: Calendar = .current, now: Date = Date()) {
+    init(settings: SettingsStore, calendar: Calendar = .current, now: Date = Date()) {
+        self.settings = settings
         let start = calendar.startOfDay(for: now)
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: start) ?? now
+        self.today = DictationEligibility.dayKey(for: now, calendar: calendar)
+        self.startOfToday = start
+        self.tomorrow = tomorrow
 
         _dueStates = FetchRequest(
             sortDescriptors: [],
@@ -34,7 +45,7 @@ struct HomeView: View {
                     .foregroundStyle(AppPalette.textPrimary)
 
                 VStack(spacing: 8) {
-                    Text("今天待复习")
+                    Text("今天待复习卡片")
                         .font(.title3.weight(.medium))
                         .foregroundStyle(AppPalette.textSecondary)
                     Text("\(dueStates.count) 张")
@@ -45,14 +56,13 @@ struct HomeView: View {
                 .accessibilityElement(children: .combine)
 
                 VStack(spacing: 14) {
-                    Button {
-                        router.push(.review)
-                    } label: {
-                        Label("开始复习", systemImage: "play.fill")
+                    if prioritizeDictation {
+                        dictationButton.buttonStyle(LargePrimaryButtonStyle())
+                        reviewButton.buttonStyle(LargeSecondaryButtonStyle())
+                    } else {
+                        dictationButton.buttonStyle(LargeSecondaryButtonStyle())
+                        reviewButton.buttonStyle(LargePrimaryButtonStyle())
                     }
-                    .buttonStyle(LargePrimaryButtonStyle())
-                    .disabled(dueStates.isEmpty)
-                    .accessibilityIdentifier("home.startReview")
 
                     Button {
                         router.push(.addWords)
@@ -63,6 +73,12 @@ struct HomeView: View {
                     .accessibilityIdentifier("home.addWords")
                 }
                 .frame(maxWidth: 440)
+
+                if prioritizeDictation {
+                    Text("建议先完成今天的默写，再复习卡片。")
+                        .font(.footnote)
+                        .foregroundStyle(AppPalette.textSecondary)
+                }
 
                 if words.isEmpty {
                     Text("还没有单词，先添加一些单词开始学习。")
@@ -88,6 +104,56 @@ struct HomeView: View {
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var dictationButton: some View {
+        Button { router.push(.dictation) } label: {
+            Label("开始默写", systemImage: "pencil.line")
+        }
+        .disabled(words.isEmpty)
+        .accessibilityIdentifier("home.startDictation")
+    }
+
+    private var reviewButton: some View {
+        Button { router.push(.review) } label: {
+            Label("开始复习", systemImage: "play.fill")
+        }
+        .disabled(dueStates.isEmpty)
+        .accessibilityIdentifier("home.startReview")
+    }
+
+    private var uninitializedLegacyWordsExist: Bool {
+        guard settings.baselineCampaign == nil,
+              !words.isEmpty else { return false }
+        return words.contains {
+            $0.createdAt < startOfToday && ($0.dictationState?.totalFormal ?? 0) == 0
+                && !isMasteredForDictation($0)
+        }
+    }
+
+    private var prioritizeDictation: Bool {
+        if uninitializedLegacyWordsExist { return true }
+        let existing = Set(words.filter { !isMasteredForDictation($0) }.map(\.id))
+        let completed = Set(dictationEvents.filter { $0.kind == "baselineFormal" }.map(\.wordID))
+        let hasPendingBaseline = settings.baselineCampaign?.selectedWordIDs.contains {
+            existing.contains($0) && !completed.contains($0)
+        } ?? false
+        if let todayDay = dictationDays.first(where: { $0.dayKey == today }) {
+            if todayDay.phase != DictationPhase.complete.rawValue { return true }
+            let count = (try? JSONDecoder().decode([DictationItem].self,
+                                                    from: todayDay.tasksData))?.count ?? 0
+            return hasPendingBaseline && count < max(50, Int(todayDay.limit))
+        }
+        if hasPendingBaseline { return true }
+        return dictationStates.contains {
+            ($0.initialCopyCompletedAt != nil || $0.totalFormal > 0)
+                && ($0.nextReviewDate.map { $0 < tomorrow } ?? false)
+                && ($0.word.map { !isMasteredForDictation($0) } ?? false)
+        }
+    }
+
+    private func isMasteredForDictation(_ word: WordEntity) -> Bool {
+        settings.masteredDictationTerms.contains(EnglishNormalizer.normalize(word.english))
     }
 
     private func utilityButton(_ title: String, symbol: String, route: AppRoute) -> some View {

@@ -5,12 +5,13 @@ struct RootView: View {
     @ObservedObject var speech: SpeechService
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var persistence: PersistenceController
+    @State private var baselineErrorMessage: String?
 
     var body: some View {
         Group {
             if persistence.isReady {
                 NavigationStack(path: $router.path) {
-                    HomeView()
+                    HomeView(settings: settings)
                         .navigationDestination(for: AppRoute.self) { route in
                             destination(for: route)
                         }
@@ -26,6 +27,21 @@ struct RootView: View {
         } message: {
             Text(persistence.loadErrorMessage ?? "发生未知错误。")
         }
+        .alert("无法准备旧词摸底", isPresented: baselineErrorBinding) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(baselineErrorMessage ?? "发生未知错误。")
+        }
+        .task(id: persistence.isReady) {
+            guard persistence.isReady, settings.baselineCampaign == nil else { return }
+            do {
+                let campaign = try await DictationRepository(container: persistence.container)
+                    .automaticBaselineCampaign(masteredTerms: settings.masteredDictationTerms)
+                if settings.baselineCampaign == nil { settings.baselineCampaign = campaign }
+            } catch {
+                baselineErrorMessage = error.localizedDescription
+            }
+        }
     }
 
     @ViewBuilder
@@ -38,6 +54,11 @@ struct RootView: View {
                 container: persistence.container,
                 settings: settings,
                 speech: speech
+            )
+        case .dictation:
+            DictationView(
+                container: persistence.container,
+                settings: settings
             )
         case .extraPractice:
             ReviewSessionView(
@@ -75,6 +96,13 @@ struct RootView: View {
             set: { isPresented in
                 if !isPresented { persistence.dismissLoadError() }
             }
+        )
+    }
+
+    private var baselineErrorBinding: Binding<Bool> {
+        Binding(
+            get: { baselineErrorMessage != nil },
+            set: { if !$0 { baselineErrorMessage = nil } }
         )
     }
 }

@@ -2,6 +2,8 @@
 
 `WordMemoryCards` 是本项目保留的内部工程、模块和数据容器名称；App 对用户显示为“简单记”。
 
+> 本版仅面向 iPadOS 27。Apple Pencil 默写已接入；手写识别与完整学习流程仍需在真机验收。
+
 An offline, iPad-first vocabulary flashcard app for family learning. Import a
 simple Markdown or plain-text word list, then let the app schedule two
 independent review directions: English to Chinese and Chinese to English.
@@ -16,7 +18,10 @@ backups stay on the device unless the user explicitly exports a backup file.
 - Same-session retry, weak-item practice, progress reports, and streaks.
 - On-device English and Chinese speech, adjustable speech rate, and haptics.
 - JSON backup and restore with validation and a safety backup before restore.
-- iPad-only SwiftUI interface, supporting portrait and landscape on iPadOS 16+.
+- Apple Pencil 英文默写：首次抄写、30 秒正式首测、错词抄写与重默，使用独立的 FSRS 进度。
+- 一次性旧词摸底：首次运行新版时自动固定今天之前加入且尚未正式默写的旧词；摸底期间每天最多 50 个，完成后恢复常规默认 20 个，新词继续走原有入门流程。
+- 完全掌握的英文写法可记录为默写免练词：不再进入旧词摸底、首次抄写或普通默写；卡片复习保留，名单随完整备份保存。
+- iPad-only SwiftUI interface, supporting portrait and landscape on iPadOS 27+.
 
 ## Build and run
 
@@ -24,7 +29,7 @@ backups stay on the device unless the user explicitly exports a backup file.
 2. Open `WordMemoryCards.xcodeproj` in Xcode.
 3. In **Signing & Capabilities**, choose your own Apple Development Team.
 4. If Xcode reports a bundle identifier conflict, change it to one you own.
-5. Select an iPad simulator or device, then press Run.
+5. Select an iPadOS 27 simulator or an iPad running iPadOS 27, then press Run. 默写手写识别须在 Apple Pencil 真机上验收。
 
 `project.yml` is the XcodeGen project definition. If you change it, install
 [XcodeGen](https://github.com/yonaskolb/XcodeGen) and run `xcodegen generate`
@@ -32,7 +37,7 @@ from the repository root to regenerate the committed Xcode project.
 
 ## Tests
 
-With an iPad Simulator booted, run the following from the repository root:
+With an iPadOS 27 iPad Simulator booted, run the following from the repository root:
 
 ```sh
 xcodebuild test -parallel-testing-enabled NO \

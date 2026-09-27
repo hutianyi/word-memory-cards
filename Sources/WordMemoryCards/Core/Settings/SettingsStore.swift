@@ -13,6 +13,18 @@ enum SessionLimitOption: Int, CaseIterable, Identifiable {
     }
 }
 
+enum DictationLimitOption: Int, CaseIterable, Identifiable {
+    case ten = 10
+    case twenty = 20
+    case thirty = 30
+    case forty = 40
+    case fifty = 50
+    case unlimited = 0
+
+    var id: Int { rawValue }
+    var title: String { rawValue == 0 ? "不限" : "\(rawValue)" }
+}
+
 enum ExtraPracticeScope: String, CaseIterable, Identifiable {
     case weakest20
     case weakest50
@@ -42,6 +54,9 @@ final class SettingsStore: ObservableObject {
     @Published var autoSpeakBack: Bool { didSet { persist() } }
     @Published var hapticsEnabled: Bool { didSet { persist() } }
     @Published var extraPracticeScope: ExtraPracticeScope { didSet { persist() } }
+    @Published var dictationLimit: DictationLimitOption { didSet { persist() } }
+    @Published var baselineCampaign: BaselineCampaignSnapshot? { didSet { persist() } }
+    @Published var masteredDictationTerms: Set<String> { didSet { persist() } }
 
     private enum Key {
         static let sessionLimit = "sessionLimit"
@@ -53,6 +68,9 @@ final class SettingsStore: ObservableObject {
         static let autoSpeakBack = "autoSpeakBack"
         static let hapticsEnabled = "hapticsEnabled"
         static let extraPracticeScope = "extraPracticeScope"
+        static let dictationLimit = "dictationLimit"
+        static let baselineCampaign = "baselineCampaign"
+        static let masteredDictationTerms = "masteredDictationTerms"
     }
 
     private let defaults: UserDefaults
@@ -72,6 +90,12 @@ final class SettingsStore: ObservableObject {
 
         let storedScope = defaults.string(forKey: Key.extraPracticeScope)
         extraPracticeScope = storedScope.flatMap(ExtraPracticeScope.init(rawValue:)) ?? .weakest20
+        let storedDictationLimit = defaults.object(forKey: Key.dictationLimit) as? Int ?? 20
+        dictationLimit = DictationLimitOption(rawValue: storedDictationLimit) ?? .twenty
+        baselineCampaign = defaults.data(forKey: Key.baselineCampaign).flatMap {
+            try? JSONDecoder().decode(BaselineCampaignSnapshot.self, from: $0)
+        }
+        masteredDictationTerms = Set(defaults.stringArray(forKey: Key.masteredDictationTerms) ?? [])
     }
 
     private func persist() {
@@ -84,5 +108,12 @@ final class SettingsStore: ObservableObject {
         defaults.set(autoSpeakBack, forKey: Key.autoSpeakBack)
         defaults.set(hapticsEnabled, forKey: Key.hapticsEnabled)
         defaults.set(extraPracticeScope.rawValue, forKey: Key.extraPracticeScope)
+        defaults.set(dictationLimit.rawValue, forKey: Key.dictationLimit)
+        if let baselineCampaign, let encoded = try? JSONEncoder().encode(baselineCampaign) {
+            defaults.set(encoded, forKey: Key.baselineCampaign)
+        } else {
+            defaults.removeObject(forKey: Key.baselineCampaign)
+        }
+        defaults.set(masteredDictationTerms.sorted(), forKey: Key.masteredDictationTerms)
     }
 }

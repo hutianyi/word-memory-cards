@@ -159,9 +159,11 @@ final class BackupViewModel: ObservableObject {
             let safetyData = try BackupService.encode(safetyEnvelope)
             try writeSafetyBackup(safetyData, reason: "PreReset")
             try await LearningProgressResetService.reset(container: container)
+            settings.baselineCampaign = nil
+            settings.masteredDictationTerms = []
             alertState = .message(
                 title: "操作完成",
-                message: "学习记录已清除。单词全部保留，两个复习方向均已重置，并从今天重新开始。"
+                message: "学习记录已清除。单词全部保留，卡片两个方向和默写进度均已重置。"
             )
         } catch {
             showError(error)
@@ -190,7 +192,10 @@ final class BackupViewModel: ObservableObject {
             autoSpeakFront: settings.autoSpeakFront,
             autoSpeakBack: settings.autoSpeakBack,
             hapticsEnabled: settings.hapticsEnabled,
-            extraPracticeScope: settings.extraPracticeScope.rawValue
+            extraPracticeScope: settings.extraPracticeScope.rawValue,
+            dictationLimit: settings.dictationLimit.rawValue,
+            baselineCampaign: settings.baselineCampaign,
+            masteredDictationTerms: settings.masteredDictationTerms.sorted()
         )
     }
 
@@ -204,6 +209,9 @@ final class BackupViewModel: ObservableObject {
         settings.autoSpeakBack = snapshot.autoSpeakBack
         settings.hapticsEnabled = snapshot.hapticsEnabled
         settings.extraPracticeScope = ExtraPracticeScope(rawValue: snapshot.extraPracticeScope) ?? .weakest20
+        settings.dictationLimit = DictationLimitOption(rawValue: snapshot.dictationLimit ?? 20) ?? .twenty
+        settings.baselineCampaign = snapshot.baselineCampaign
+        settings.masteredDictationTerms = Set(snapshot.masteredDictationTerms ?? [])
     }
 
     private func writeSafetyBackup(_ data: Data, reason: String) throws {

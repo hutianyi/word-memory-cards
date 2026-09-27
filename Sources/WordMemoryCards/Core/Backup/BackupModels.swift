@@ -3,7 +3,7 @@ import Foundation
 struct BackupEnvelope: Codable {
     static let appMarker = "WordMemoryCards"
     static let currentBackupFormatVersion = 1
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     let app: String
     let backupFormatVersion: Int
@@ -19,6 +19,72 @@ struct BackupData: Codable {
     let reviewEvents: [BackupReviewEvent]
     let studySessions: [BackupStudySession]
     let settings: BackupSettings
+    let dictationStates: [BackupDictationState]?
+    let dictationDays: [BackupDictationDay]?
+    let dictationEvents: [BackupDictationEvent]?
+
+    init(
+        words: [BackupWord], reviewStates: [BackupReviewState],
+        reviewEvents: [BackupReviewEvent], studySessions: [BackupStudySession],
+        settings: BackupSettings,
+        dictationStates: [BackupDictationState]? = nil,
+        dictationDays: [BackupDictationDay]? = nil,
+        dictationEvents: [BackupDictationEvent]? = nil
+    ) {
+        self.words = words
+        self.reviewStates = reviewStates
+        self.reviewEvents = reviewEvents
+        self.studySessions = studySessions
+        self.settings = settings
+        self.dictationStates = dictationStates
+        self.dictationDays = dictationDays
+        self.dictationEvents = dictationEvents
+    }
+}
+
+struct BackupDictationState: Codable {
+    let id: UUID
+    let wordID: UUID
+    let englishVersion: String
+    let initialCopyCount: Int16
+    let initialCopyStartedAt: Date
+    let initialCopyCompletedAt: Date?
+    let fsrsCardData: Data?
+    let nextReviewDate: Date?
+    let formalNotBefore: Date?
+    let lastFormalDay: String?
+    let totalFormal: Int64
+    let lastResult: String?
+}
+
+struct BackupDictationDay: Codable {
+    let id: UUID
+    let dayKey: String
+    let timeZoneID: String
+    let limit: Int32
+    let phase: String
+    let tasksData: Data
+    let createdAt: Date
+    let updatedAt: Date
+}
+
+struct BackupDictationEvent: Codable {
+    let id: UUID
+    let wordID: UUID
+    let dayID: UUID?
+    let dayKey: String
+    let kind: String
+    let formalKey: String?
+    let result: String
+    let reason: String?
+    let recognizedText: String?
+    let answerSnapshot: String
+    let chineseSnapshot: String
+    let submittedAt: Date
+    let remainingSeconds: Double
+    let round: Int16
+    let fsrsBefore: Data?
+    let fsrsAfter: Data?
 }
 
 struct BackupWord: Codable {
@@ -92,6 +158,37 @@ struct BackupSettings: Codable {
     let autoSpeakBack: Bool
     let hapticsEnabled: Bool
     let extraPracticeScope: String
+    let dictationLimit: Int?
+    let baselineCampaign: BaselineCampaignSnapshot?
+    let masteredDictationTerms: [String]?
+
+    init(
+        sessionLimit: Int,
+        englishVoiceIdentifier: String?,
+        chineseVoiceIdentifier: String?,
+        englishSpeechRate: Double,
+        chineseSpeechRate: Double,
+        autoSpeakFront: Bool,
+        autoSpeakBack: Bool,
+        hapticsEnabled: Bool,
+        extraPracticeScope: String,
+        dictationLimit: Int? = nil,
+        baselineCampaign: BaselineCampaignSnapshot? = nil,
+        masteredDictationTerms: [String]? = nil
+    ) {
+        self.sessionLimit = sessionLimit
+        self.englishVoiceIdentifier = englishVoiceIdentifier
+        self.chineseVoiceIdentifier = chineseVoiceIdentifier
+        self.englishSpeechRate = englishSpeechRate
+        self.chineseSpeechRate = chineseSpeechRate
+        self.autoSpeakFront = autoSpeakFront
+        self.autoSpeakBack = autoSpeakBack
+        self.hapticsEnabled = hapticsEnabled
+        self.extraPracticeScope = extraPracticeScope
+        self.dictationLimit = dictationLimit
+        self.baselineCampaign = baselineCampaign
+        self.masteredDictationTerms = masteredDictationTerms
+    }
 }
 
 struct BackupSummary {
@@ -100,6 +197,9 @@ struct BackupSummary {
     let stateCount: Int
     let eventCount: Int
     let sessionCount: Int
+    let dictationStateCount: Int
+    let dictationDayCount: Int
+    let dictationEventCount: Int
     let appVersion: String
 
     init(envelope: BackupEnvelope) {
@@ -108,6 +208,9 @@ struct BackupSummary {
         stateCount = envelope.data.reviewStates.count
         eventCount = envelope.data.reviewEvents.count
         sessionCount = envelope.data.studySessions.count
+        dictationStateCount = envelope.data.dictationStates?.count ?? 0
+        dictationDayCount = envelope.data.dictationDays?.count ?? 0
+        dictationEventCount = envelope.data.dictationEvents?.count ?? 0
         appVersion = envelope.appVersion
     }
 
@@ -118,6 +221,9 @@ struct BackupSummary {
         双向复习状态：\(stateCount)
         学习记录：\(eventCount)
         Session：\(sessionCount)
+        默写词状态：\(dictationStateCount)
+        默写日记录：\(dictationDayCount)
+        默写作答记录：\(dictationEventCount)
         App 版本：\(appVersion)
 
         恢复会替换当前本地数据。

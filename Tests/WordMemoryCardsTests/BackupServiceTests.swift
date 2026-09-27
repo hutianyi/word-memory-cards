@@ -7,6 +7,41 @@ final class BackupServiceTests: XCTestCase {
     func testRoundTripRestoresAllEntitiesAndRelationships() async throws {
         let source = PersistenceController(inMemory: true)
         let fixture = try seedFixture(in: source.container.viewContext)
+        let sourceContext = source.container.viewContext
+        let word = try XCTUnwrap(try sourceContext.fetch(WordEntity.fetchRequest()).first)
+        let dictation = DictationStateEntity(context: sourceContext)
+        dictation.id = UUID()
+        dictation.wordID = fixture.wordID
+        dictation.word = word
+        dictation.englishVersion = "apple"
+        dictation.initialCopyCount = 2
+        dictation.initialCopyStartedAt = Date()
+        dictation.totalFormal = 0
+        let day = DictationDayEntity(context: sourceContext)
+        day.id = UUID()
+        day.dayKey = "2026-09-27"
+        day.timeZoneID = "Asia/Shanghai"
+        day.limit = 20
+        day.phase = DictationPhase.firstPass.rawValue
+        day.tasksData = try JSONEncoder().encode([
+            DictationItem(wordID: fixture.wordID, english: "apple", chinese: "苹果")
+        ])
+        day.createdAt = Date()
+        day.updatedAt = Date()
+        let dictationEvent = DictationEventEntity(context: sourceContext)
+        dictationEvent.id = UUID()
+        dictationEvent.wordID = fixture.wordID
+        dictationEvent.dayID = day.id
+        dictationEvent.dayKey = day.dayKey
+        dictationEvent.kind = "initialCopy"
+        dictationEvent.result = "correct"
+        dictationEvent.recognizedText = "apple"
+        dictationEvent.answerSnapshot = "apple"
+        dictationEvent.chineseSnapshot = "苹果"
+        dictationEvent.submittedAt = Date()
+        dictationEvent.remainingSeconds = 0
+        dictationEvent.round = 0
+        try sourceContext.save()
         let settings = BackupSettings(
             sessionLimit: 30,
             englishVoiceIdentifier: nil,
@@ -16,7 +51,11 @@ final class BackupServiceTests: XCTestCase {
             autoSpeakFront: true,
             autoSpeakBack: true,
             hapticsEnabled: true,
-            extraPracticeScope: ExtraPracticeScope.weakest20.rawValue
+            extraPracticeScope: ExtraPracticeScope.weakest20.rawValue,
+            baselineCampaign: BaselineCampaignSnapshot(
+                selectedWordIDs: [fixture.wordID], activatedAt: Date()
+            ),
+            masteredDictationTerms: ["apple", "computer"]
         )
 
         let envelope = try await BackupService.makeEnvelope(
@@ -25,6 +64,8 @@ final class BackupServiceTests: XCTestCase {
             appVersion: "1.1"
         )
         let decoded = try BackupService.decodeAndValidate(BackupService.encode(envelope))
+        XCTAssertEqual(decoded.data.settings.baselineCampaign?.selectedWordIDs, [fixture.wordID])
+        XCTAssertEqual(decoded.data.settings.masteredDictationTerms, ["apple", "computer"])
 
         let destination = PersistenceController(inMemory: true)
         try await BackupService.restore(decoded, into: destination.container)
@@ -34,6 +75,9 @@ final class BackupServiceTests: XCTestCase {
         let states = try context.fetch(ReviewStateEntity.fetchRequest())
         let events = try context.fetch(ReviewEventEntity.fetchRequest())
         let sessions = try context.fetch(StudySessionEntity.fetchRequest())
+        let dictationStates = try context.fetch(DictationStateEntity.fetchRequest())
+        let dictationDays = try context.fetch(DictationDayEntity.fetchRequest())
+        let dictationEvents = try context.fetch(DictationEventEntity.fetchRequest())
 
         XCTAssertEqual(words.map(\.id), [fixture.wordID])
         XCTAssertEqual(words.first?.importPosition, 7)
@@ -42,6 +86,45 @@ final class BackupServiceTests: XCTestCase {
         XCTAssertEqual(events.first?.word?.id, fixture.wordID)
         XCTAssertEqual(events.first?.reviewState.id, fixture.stateID)
         XCTAssertEqual(sessions.map(\.id), [fixture.sessionID])
+        XCTAssertEqual(dictationStates.first?.initialCopyCount, 2)
+        XCTAssertEqual(dictationDays.first?.dayKey, "2026-09-27")
+        XCTAssertEqual(dictationDays.first?.timeZoneID, "Asia/Shanghai")
+        XCTAssertEqual(dictationDays.first?.tasksData, day.tasksData)
+        XCTAssertEqual(dictationEvents.first?.id, dictationEvent.id)
+        XCTAssertEqual(dictationEvents.first?.recognizedText, "apple")
+    }
+
+    func testSchemaTwoBackupRestoresWithoutInventingDictationProgress() async throws {
+        let source = PersistenceController(inMemory: true)
+        let fixture = try seedFixture(in: source.container.viewContext)
+        let settings = BackupSettings(
+            sessionLimit: 30, englishVoiceIdentifier: nil, chineseVoiceIdentifier: nil,
+            englishSpeechRate: 0.46, chineseSpeechRate: 0.46,
+            autoSpeakFront: true, autoSpeakBack: true, hapticsEnabled: true,
+            extraPracticeScope: ExtraPracticeScope.weakest20.rawValue
+        )
+        let current = try await BackupService.makeEnvelope(
+            container: source.container, settings: settings, appVersion: "1.1"
+        )
+        let legacy = BackupEnvelope(
+            app: current.app, backupFormatVersion: current.backupFormatVersion,
+            schemaVersion: 2, appVersion: current.appVersion, exportedAt: current.exportedAt,
+            data: BackupData(
+                words: current.data.words, reviewStates: current.data.reviewStates,
+                reviewEvents: current.data.reviewEvents, studySessions: current.data.studySessions,
+                settings: current.data.settings
+            )
+        )
+        let decoded = try BackupService.decodeAndValidate(BackupService.encode(legacy))
+        XCTAssertNil(decoded.data.settings.baselineCampaign)
+        XCTAssertNil(decoded.data.settings.masteredDictationTerms)
+        let destination = PersistenceController(inMemory: true)
+        try await BackupService.restore(decoded, into: destination.container)
+        let context = destination.container.viewContext
+        XCTAssertEqual(try context.fetch(WordEntity.fetchRequest()).first?.id, fixture.wordID)
+        XCTAssertEqual(try context.count(for: DictationStateEntity.fetchRequest()), 0)
+        XCTAssertEqual(try context.count(for: DictationDayEntity.fetchRequest()), 0)
+        XCTAssertEqual(try context.count(for: DictationEventEntity.fetchRequest()), 0)
     }
 
     func testLegacyBackupWordDecodesWithoutImportPosition() throws {

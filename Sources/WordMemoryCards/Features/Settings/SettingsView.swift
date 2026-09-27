@@ -38,6 +38,19 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker("每日默写上限", selection: $settings.dictationLimit) {
+                    ForEach(DictationLimitOption.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                Text("常规默写默认每天 20 个，可在这里调整；一次性旧词摸底期间每天最多 50 个。")
+                    .font(.footnote)
+                    .foregroundStyle(AppPalette.textSecondary)
+            } header: {
+                Text("默写")
+            }
+
+            Section {
                 Picker("英文语音", selection: $settings.englishVoiceIdentifier) {
                     Text("自动选择 Zoe").tag(String?.none)
                     ForEach(speech.englishVoices) { voice in
@@ -107,7 +120,7 @@ struct SettingsView: View {
             } header: {
                 Text("数据管理")
             } footer: {
-                Text("复制英文：按词库顺序，一行一个单词或词组。完整备份为 JSON 格式，包含词库、学习记录和设置；恢复前会先校验，并自动保存当前数据的安全备份。")
+                Text("复制英文：按词库顺序，一行一个单词或词组。完整备份为 JSON 格式，包含词库、卡片与默写学习记录、未完成任务和设置；恢复前会先校验，并自动保存当前数据的安全备份。")
             }
 
             Section {
@@ -193,7 +206,7 @@ struct SettingsView: View {
         case .confirmReset:
             return Alert(
                 title: Text("清除全部学习记录？"),
-                message: Text("所有单词会保留。正式复习、额外加练和 Session 记录会被清除，两个方向都重置并从今天开始。清除前会自动生成本地安全备份。"),
+                message: Text("所有单词会保留。卡片复习、加练、默写进度与未完成任务都会清除。清除前会自动生成本地安全备份。"),
                 primaryButton: .destructive(Text("确认清除")) {
                     Task { await backup.confirmResetLearningProgress() }
                 },

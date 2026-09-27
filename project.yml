@@ -3,7 +3,7 @@ name: WordMemoryCards
 options:
   bundleIdPrefix: com.hutianyi
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "27.0"
   developmentLanguage: zh-Hans
   createIntermediateGroups: true
   generateEmptyDirectories: false
@@ -23,7 +23,7 @@ targets:
   WordMemoryCards:
     type: application
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "27.0"
     sources:
       - path: Sources/WordMemoryCards
     dependencies:
@@ -47,7 +47,7 @@ targets:
   WordMemoryCardsTests:
     type: bundle.unit-test
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "27.0"
     sources:
       - path: Tests/WordMemoryCardsTests
     dependencies:
@@ -63,7 +63,7 @@ targets:
   WordMemoryCardsUITests:
     type: bundle.ui-testing
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "27.0"
     sources:
       - path: Tests/WordMemoryCardsUITests
     dependencies:

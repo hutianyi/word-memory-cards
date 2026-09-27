@@ -28,7 +28,7 @@ struct WordDetailView: View {
             } header: {
                 Text("词条")
             } footer: {
-                Text("修改中文不会改变两个方向的复习进度和历史。")
+                Text("修改中文保留学习进度；实质修改英文后，该词需要重新取得默写资格并完成首次抄写。")
             }
 
             ForEach(sortedStates, id: \.objectID) { state in
@@ -37,6 +37,20 @@ struct WordDetailView: View {
                     LabeledContent("正式认识", value: "\(state.knownCount)")
                     LabeledContent("正式不认识", value: "\(state.unknownCount)")
                     LabeledContent("最近 5 次", value: recentResults(for: state))
+                }
+            }
+
+            if let dictation = word.dictationState {
+                Section("默写") {
+                    if dictation.totalFormal > 0 && dictation.initialCopyCompletedAt == nil {
+                        LabeledContent("入门方式", value: "旧词摸底")
+                    } else {
+                        LabeledContent("首次抄写", value: "\(dictation.initialCopyCount) / 3")
+                    }
+                    LabeledContent("正式默写次数", value: "\(dictation.totalFormal)")
+                    if let due = dictation.nextReviewDate {
+                        LabeledContent("下次默写", value: due.formatted(date: .abbreviated, time: .omitted))
+                    }
                 }
             }
 
@@ -53,7 +67,7 @@ struct WordDetailView: View {
             Button("删除", role: .destructive) { deleteWord() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("这会同时删除两个方向的复习状态和全部历史学习记录。此操作不可撤销。")
+            Text("这会同时删除两个方向的复习状态、默写进度及该词的全部历史学习记录。此操作不可撤销。")
         }
         .alert("无法保存", isPresented: errorBinding) {
             Button("好", role: .cancel) {}
@@ -112,12 +126,21 @@ struct WordDetailView: View {
                 errorMessage = "这个英文已经存在，不能保存重复词条。"
                 return
             }
+            let resetsDictation = normalized != word.normalizedEnglish
+            if resetsDictation {
+                try DictationRepository.reconcileTasks(
+                    for: word.id, preservingHistory: true, in: context
+                )
+                if let state = word.dictationState { context.delete(state) }
+            }
             word.english = trimmedEnglish
             word.normalizedEnglish = normalized
             word.chinese = trimmedChinese
             word.updatedAt = Date()
             try context.save()
-            savedMessage = "词条已更新，学习记录保持不变。"
+            savedMessage = resetsDictation
+                ? "词条已更新。原卡片进度保留；此词的默写资格和抄写进度需重新建立。"
+                : "词条已更新，学习记录保持不变。"
         } catch {
             context.rollback()
             errorMessage = error.localizedDescription
@@ -125,8 +148,11 @@ struct WordDetailView: View {
     }
 
     private func deleteWord() {
-        context.delete(word)
         do {
+            try DictationRepository.reconcileTasks(
+                for: word.id, preservingHistory: false, in: context
+            )
+            context.delete(word)
             try context.save()
             dismiss()
         } catch {

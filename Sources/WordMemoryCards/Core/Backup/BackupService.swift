@@ -110,12 +110,49 @@ enum BackupService {
                 )
             }
 
+            let dictationStates = try context.fetch(DictationStateEntity.fetchRequest()).map { state in
+                BackupDictationState(
+                    id: state.id, wordID: state.wordID,
+                    englishVersion: state.englishVersion,
+                    initialCopyCount: state.initialCopyCount,
+                    initialCopyStartedAt: state.initialCopyStartedAt,
+                    initialCopyCompletedAt: state.initialCopyCompletedAt,
+                    fsrsCardData: state.fsrsCardData,
+                    nextReviewDate: state.nextReviewDate,
+                    formalNotBefore: state.formalNotBefore,
+                    lastFormalDay: state.lastFormalDay,
+                    totalFormal: state.totalFormal,
+                    lastResult: state.lastResult
+                )
+            }
+            let dictationDays = try context.fetch(DictationDayEntity.fetchRequest()).map { day in
+                BackupDictationDay(
+                    id: day.id, dayKey: day.dayKey, timeZoneID: day.timeZoneID,
+                    limit: day.limit, phase: day.phase, tasksData: day.tasksData,
+                    createdAt: day.createdAt, updatedAt: day.updatedAt
+                )
+            }
+            let dictationEvents = try context.fetch(DictationEventEntity.fetchRequest()).map { event in
+                BackupDictationEvent(
+                    id: event.id, wordID: event.wordID, dayID: event.dayID,
+                    dayKey: event.dayKey, kind: event.kind, formalKey: event.formalKey,
+                    result: event.result,
+                    reason: event.reason, recognizedText: event.recognizedText,
+                    answerSnapshot: event.answerSnapshot, chineseSnapshot: event.chineseSnapshot,
+                    submittedAt: event.submittedAt, remainingSeconds: event.remainingSeconds,
+                    round: event.round, fsrsBefore: event.fsrsBefore, fsrsAfter: event.fsrsAfter
+                )
+            }
+
             return BackupData(
                 words: words.sorted { $0.normalizedEnglish < $1.normalizedEnglish },
                 reviewStates: states.sorted { $0.id.uuidString < $1.id.uuidString },
                 reviewEvents: events.sorted { $0.reviewedAt < $1.reviewedAt },
                 studySessions: sessions.sorted { $0.startedAt < $1.startedAt },
-                settings: settings
+                settings: settings,
+                dictationStates: dictationStates.sorted { $0.wordID.uuidString < $1.wordID.uuidString },
+                dictationDays: dictationDays.sorted { $0.dayKey < $1.dayKey },
+                dictationEvents: dictationEvents.sorted { $0.submittedAt < $1.submittedAt }
             )
         }
 
@@ -230,11 +267,93 @@ enum BackupService {
             }
         }
 
+        if envelope.schemaVersion >= 3 {
+            guard data.dictationStates != nil, data.dictationDays != nil,
+                  data.dictationEvents != nil else {
+                throw BackupError.invalidData("缺少默写学习记录")
+            }
+        }
+        var dictationWordIDs = Set<UUID>()
+        for state in data.dictationStates ?? [] {
+            guard wordIDs.contains(state.wordID),
+                  dictationWordIDs.insert(state.wordID).inserted,
+                  (0...3).contains(state.initialCopyCount),
+                  state.totalFormal >= 0,
+                  !state.englishVersion.isEmpty else {
+                throw BackupError.invalidData("默写状态无效")
+            }
+            if let cardData = state.fsrsCardData,
+               (try? SRSScheduler.decodeCard(cardData)) == nil {
+                throw BackupError.invalidData("默写调度数据无效")
+            }
+        }
+        var dictationDayKeys = Set<String>()
+        for day in data.dictationDays ?? [] {
+            guard dictationDayKeys.insert(day.dayKey).inserted,
+                  DictationPhase(rawValue: day.phase) != nil,
+                  day.limit == 0 || [10, 20, 30, 40, 50].contains(Int(day.limit)),
+                  TimeZone(identifier: day.timeZoneID) != nil,
+                  let items = try? JSONDecoder().decode([DictationItem].self, from: day.tasksData),
+                  Set(items.map(\.wordID)).count == items.count,
+                  items.allSatisfy({ wordIDs.contains($0.wordID) }) else {
+                throw BackupError.invalidData("默写日队列无效")
+            }
+        }
+        let dictationDayIDs = Set((data.dictationDays ?? []).map(\.id))
+        guard dictationDayIDs.count == (data.dictationDays ?? []).count else {
+            throw BackupError.invalidData("存在重复的默写日记录 ID")
+        }
+        var dictationEventIDs = Set<UUID>()
+        var formalKeys = Set<String>()
+        for event in data.dictationEvents ?? [] {
+            guard dictationEventIDs.insert(event.id).inserted,
+                  wordIDs.contains(event.wordID),
+                  event.dayID.map(dictationDayIDs.contains) ?? true,
+                  ["initialCopy", "formal", "baselineFormal", "remediationCopy", "retest",
+                   "recognitionRetry", "interruption"].contains(event.kind),
+                  ["correct", "incorrect", "none"].contains(event.result),
+                  event.reason.map({ DictationFailureReason(rawValue: $0) != nil }) ?? true,
+                  !event.answerSnapshot.isEmpty,
+                  event.remainingSeconds.isFinite,
+                  (0...30).contains(event.remainingSeconds),
+                  event.round >= 0 else {
+                throw BackupError.invalidData("默写作答记录无效")
+            }
+            if event.kind == "formal" || event.kind == "baselineFormal" {
+                let expected = "\(event.dayKey)|\(event.wordID.uuidString)"
+                guard event.formalKey == expected,
+                      formalKeys.insert(expected).inserted else {
+                    throw BackupError.invalidData("同一单词同一天存在重复正式默写")
+                }
+            } else if event.formalKey != nil {
+                throw BackupError.invalidData("非正式默写记录带有正式去重标记")
+            }
+            if let before = event.fsrsBefore,
+               (try? SRSScheduler.decodeCard(before)) == nil {
+                throw BackupError.invalidData("默写作答前调度数据无效")
+            }
+            if let after = event.fsrsAfter,
+               (try? SRSScheduler.decodeCard(after)) == nil {
+                throw BackupError.invalidData("默写作答后调度数据无效")
+            }
+        }
+
         guard SessionLimitOption(rawValue: data.settings.sessionLimit) != nil,
               ExtraPracticeScope(rawValue: data.settings.extraPracticeScope) != nil,
+              data.settings.dictationLimit.map({ [0, 10, 20, 30, 40, 50].contains($0) }) ?? true,
               (0.30...0.62).contains(data.settings.englishSpeechRate),
               (0.30...0.62).contains(data.settings.chineseSpeechRate) else {
             throw BackupError.invalidData("设置值无效")
+        }
+        if let campaign = data.settings.baselineCampaign,
+           Set(campaign.selectedWordIDs).count != campaign.selectedWordIDs.count {
+            throw BackupError.invalidData("旧词摸底名单存在重复词条")
+        }
+        if let mastered = data.settings.masteredDictationTerms {
+            guard Set(mastered).count == mastered.count,
+                  mastered.allSatisfy({ !$0.isEmpty && EnglishNormalizer.normalize($0) == $0 }) else {
+                throw BackupError.invalidData("已掌握默写词条无效")
+            }
         }
     }
 
@@ -249,6 +368,9 @@ enum BackupService {
 
         try await context.perform {
             do {
+                try deleteAll(DictationEventEntity.fetchRequest(), in: context)
+                try deleteAll(DictationDayEntity.fetchRequest(), in: context)
+                try deleteAll(DictationStateEntity.fetchRequest(), in: context)
                 try deleteAll(ReviewEventEntity.fetchRequest(), in: context)
                 try deleteAll(ReviewStateEntity.fetchRequest(), in: context)
                 try deleteAll(StudySessionEntity.fetchRequest(), in: context)
@@ -265,6 +387,56 @@ enum BackupService {
                     word.createdAt = item.createdAt
                     word.updatedAt = item.updatedAt
                     words[item.id] = word
+                }
+
+                for item in envelope.data.dictationStates ?? [] {
+                    guard let word = words[item.wordID] else {
+                        throw BackupError.brokenRelationship("恢复默写状态时找不到单词")
+                    }
+                    let state = DictationStateEntity(context: context)
+                    state.id = item.id
+                    state.wordID = item.wordID
+                    state.word = word
+                    state.englishVersion = item.englishVersion
+                    state.initialCopyCount = item.initialCopyCount
+                    state.initialCopyStartedAt = item.initialCopyStartedAt
+                    state.initialCopyCompletedAt = item.initialCopyCompletedAt
+                    state.fsrsCardData = item.fsrsCardData
+                    state.nextReviewDate = item.nextReviewDate
+                    state.formalNotBefore = item.formalNotBefore
+                    state.lastFormalDay = item.lastFormalDay
+                    state.totalFormal = item.totalFormal
+                    state.lastResult = item.lastResult
+                }
+                for item in envelope.data.dictationDays ?? [] {
+                    let day = DictationDayEntity(context: context)
+                    day.id = item.id
+                    day.dayKey = item.dayKey
+                    day.timeZoneID = item.timeZoneID
+                    day.limit = item.limit
+                    day.phase = item.phase
+                    day.tasksData = item.tasksData
+                    day.createdAt = item.createdAt
+                    day.updatedAt = item.updatedAt
+                }
+                for item in envelope.data.dictationEvents ?? [] {
+                    let event = DictationEventEntity(context: context)
+                    event.id = item.id
+                    event.wordID = item.wordID
+                    event.dayID = item.dayID
+                    event.dayKey = item.dayKey
+                    event.kind = item.kind
+                    event.formalKey = item.formalKey
+                    event.result = item.result
+                    event.reason = item.reason
+                    event.recognizedText = item.recognizedText
+                    event.answerSnapshot = item.answerSnapshot
+                    event.chineseSnapshot = item.chineseSnapshot
+                    event.submittedAt = item.submittedAt
+                    event.remainingSeconds = item.remainingSeconds
+                    event.round = item.round
+                    event.fsrsBefore = item.fsrsBefore
+                    event.fsrsAfter = item.fsrsAfter
                 }
 
                 var states: [UUID: ReviewStateEntity] = [:]

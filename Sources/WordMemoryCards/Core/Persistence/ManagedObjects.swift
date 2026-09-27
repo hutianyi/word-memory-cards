@@ -18,6 +18,74 @@ extension WordEntity {
     @NSManaged var updatedAt: Date
     @NSManaged var reviewStates: Set<ReviewStateEntity>
     @NSManaged var events: Set<ReviewEventEntity>
+    @NSManaged var dictationState: DictationStateEntity?
+}
+
+@objc(DictationStateEntity)
+final class DictationStateEntity: NSManagedObject {}
+
+extension DictationStateEntity {
+    @nonobjc class func fetchRequest() -> NSFetchRequest<DictationStateEntity> {
+        NSFetchRequest<DictationStateEntity>(entityName: "DictationStateEntity")
+    }
+
+    @NSManaged var id: UUID
+    @NSManaged var wordID: UUID
+    @NSManaged var englishVersion: String
+    @NSManaged var initialCopyCount: Int16
+    @NSManaged var initialCopyStartedAt: Date
+    @NSManaged var initialCopyCompletedAt: Date?
+    @NSManaged var fsrsCardData: Data?
+    @NSManaged var nextReviewDate: Date?
+    @NSManaged var formalNotBefore: Date?
+    @NSManaged var lastFormalDay: String?
+    @NSManaged var totalFormal: Int64
+    @NSManaged var lastResult: String?
+    @NSManaged var word: WordEntity?
+}
+
+@objc(DictationDayEntity)
+final class DictationDayEntity: NSManagedObject {}
+
+extension DictationDayEntity {
+    @nonobjc class func fetchRequest() -> NSFetchRequest<DictationDayEntity> {
+        NSFetchRequest<DictationDayEntity>(entityName: "DictationDayEntity")
+    }
+
+    @NSManaged var id: UUID
+    @NSManaged var dayKey: String
+    @NSManaged var timeZoneID: String
+    @NSManaged var limit: Int32
+    @NSManaged var phase: String
+    @NSManaged var tasksData: Data
+    @NSManaged var createdAt: Date
+    @NSManaged var updatedAt: Date
+}
+
+@objc(DictationEventEntity)
+final class DictationEventEntity: NSManagedObject {}
+
+extension DictationEventEntity {
+    @nonobjc class func fetchRequest() -> NSFetchRequest<DictationEventEntity> {
+        NSFetchRequest<DictationEventEntity>(entityName: "DictationEventEntity")
+    }
+
+    @NSManaged var id: UUID
+    @NSManaged var wordID: UUID
+    @NSManaged var dayID: UUID?
+    @NSManaged var dayKey: String
+    @NSManaged var kind: String
+    @NSManaged var formalKey: String?
+    @NSManaged var result: String
+    @NSManaged var reason: String?
+    @NSManaged var recognizedText: String?
+    @NSManaged var answerSnapshot: String
+    @NSManaged var chineseSnapshot: String
+    @NSManaged var submittedAt: Date
+    @NSManaged var remainingSeconds: Double
+    @NSManaged var round: Int16
+    @NSManaged var fsrsBefore: Data?
+    @NSManaged var fsrsAfter: Data?
 }
 
 @objc(ReviewStateEntity)
