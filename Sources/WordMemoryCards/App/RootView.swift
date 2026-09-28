@@ -5,13 +5,16 @@ struct RootView: View {
     @ObservedObject var speech: SpeechService
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var persistence: PersistenceController
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var homeDate = Date()
     @State private var baselineErrorMessage: String?
 
     var body: some View {
         Group {
             if persistence.isReady {
                 NavigationStack(path: $router.path) {
-                    HomeView(settings: settings)
+                    HomeView(settings: settings, now: homeDate)
+                        .id(DictationEligibility.dayKey(for: homeDate))
                         .navigationDestination(for: AppRoute.self) { route in
                             destination(for: route)
                         }
@@ -31,6 +34,9 @@ struct RootView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text(baselineErrorMessage ?? "发生未知错误。")
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { homeDate = Date() }
         }
         .task(id: persistence.isReady) {
             guard persistence.isReady, settings.baselineCampaign == nil else { return }

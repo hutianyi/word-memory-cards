@@ -56,12 +56,16 @@ struct HomeView: View {
                 .accessibilityElement(children: .combine)
 
                 VStack(spacing: 14) {
-                    if prioritizeDictation {
-                        dictationButton.buttonStyle(LargePrimaryButtonStyle())
+                    if dueStates.isEmpty {
                         reviewButton.buttonStyle(LargeSecondaryButtonStyle())
                     } else {
-                        dictationButton.buttonStyle(LargeSecondaryButtonStyle())
                         reviewButton.buttonStyle(LargePrimaryButtonStyle())
+                    }
+
+                    if hasPendingDictation && dueStates.isEmpty {
+                        dictationButton.buttonStyle(LargePrimaryButtonStyle())
+                    } else {
+                        dictationButton.buttonStyle(LargeSecondaryButtonStyle())
                     }
 
                     Button {
@@ -73,12 +77,6 @@ struct HomeView: View {
                     .accessibilityIdentifier("home.addWords")
                 }
                 .frame(maxWidth: 440)
-
-                if prioritizeDictation {
-                    Text("建议先完成今天的默写，再复习卡片。")
-                        .font(.footnote)
-                        .foregroundStyle(AppPalette.textSecondary)
-                }
 
                 if words.isEmpty {
                     Text("还没有单词，先添加一些单词开始学习。")
@@ -116,7 +114,7 @@ struct HomeView: View {
 
     private var reviewButton: some View {
         Button { router.push(.review) } label: {
-            Label("开始复习", systemImage: "play.fill")
+            Label("开始复习卡片", systemImage: "play.fill")
         }
         .disabled(dueStates.isEmpty)
         .accessibilityIdentifier("home.startReview")
@@ -131,7 +129,7 @@ struct HomeView: View {
         }
     }
 
-    private var prioritizeDictation: Bool {
+    private var hasPendingDictation: Bool {
         if uninitializedLegacyWordsExist { return true }
         let existing = Set(words.filter { !isMasteredForDictation($0) }.map(\.id))
         let completed = Set(dictationEvents.filter { $0.kind == "baselineFormal" }.map(\.wordID))
