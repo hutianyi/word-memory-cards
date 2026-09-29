@@ -5,12 +5,17 @@ struct PencilCanvas: UIViewRepresentable {
     @Environment(\.colorScheme) private var colorScheme
     @Binding var drawing: PKDrawing
 
-    private var inkColor: UIColor { colorScheme == .dark ? .white : .black }
+    private var inkColor: UIColor {
+        let value: CGFloat = colorScheme == .dark ? 1 : 0
+        return UIColor(red: value, green: value, blue: value, alpha: 1)
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     func makeUIView(context: Context) -> PKCanvasView {
         let canvas = PKCanvasView()
+        // Ink colors are explicit; prevent PencilKit from inverting them again in dark mode.
+        canvas.overrideUserInterfaceStyle = .light
         canvas.drawingPolicy = .pencilOnly
         canvas.tool = PKInkingTool(.pen, color: inkColor, width: 5)
         canvas.backgroundColor = .clear
@@ -23,6 +28,7 @@ struct PencilCanvas: UIViewRepresentable {
 
     func updateUIView(_ canvas: PKCanvasView, context: Context) {
         context.coordinator.parent = self
+        canvas.overrideUserInterfaceStyle = .light
         if let tool = canvas.tool as? PKInkingTool, tool.color != inkColor {
             canvas.tool = PKInkingTool(.pen, color: inkColor, width: 5)
         }

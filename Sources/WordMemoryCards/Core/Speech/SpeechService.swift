@@ -20,10 +20,16 @@ final class SpeechService: NSObject, ObservableObject {
     private var activeUtterance: AVSpeechUtterance?
     private var pendingRequest: Request?
     private var didTryBasicFallback = false
+    private var activationTask: Task<Void, Never>?
+    private let activationOverride: (() async throws -> Bool)?
+    private let playbackOverride: ((AVSpeechUtterance) -> Void)?
     private var watchdogTask: Task<Void, Never>?
     private var notificationTokens: [NSObjectProtocol] = []
 
-    override init() {
+    init(activation: (() async throws -> Bool)? = nil,
+         playback: ((AVSpeechUtterance) -> Void)? = nil) {
+        activationOverride = activation
+        playbackOverride = playback
         super.init()
         synthesizer.delegate = self
         refreshVoices()
@@ -31,6 +37,7 @@ final class SpeechService: NSObject, ObservableObject {
     }
 
     deinit {
+        activationTask?.cancel()
         watchdogTask?.cancel()
         for token in notificationTokens {
             NotificationCenter.default.removeObserver(token)
@@ -69,6 +76,8 @@ final class SpeechService: NSObject, ObservableObject {
     }
 
     private func stop(clearPending: Bool) {
+        activationTask?.cancel()
+        activationTask = nil
         watchdogTask?.cancel()
         watchdogTask = nil
         if synthesizer.isSpeaking || synthesizer.isPaused {
@@ -81,8 +90,35 @@ final class SpeechService: NSObject, ObservableObject {
     }
 
     private func perform(_ request: Request, forceBasicFallback: Bool) {
-        configureAudioSession()
+        activationTask?.cancel()
+        watchdogTask?.cancel()
+        activationTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let activated: Bool
+                if let activationOverride = self.activationOverride {
+                    activated = try await activationOverride()
+                } else {
+                    activated = try await self.configureAudioSession()
+                }
+                // Activation can finish after a stop or after another word replaces this one.
+                guard !Task.isCancelled, self.pendingRequest?.id == request.id else { return }
+                self.activationTask = nil
+                guard activated else {
+                    self.reportActivationFailure("Audio session was not activated")
+                    self.stop(clearPending: true)
+                    return
+                }
+                self.beginSpeaking(request, forceBasicFallback: forceBasicFallback)
+            } catch {
+                guard !Task.isCancelled, self.pendingRequest?.id == request.id else { return }
+                self.reportActivationFailure(error.localizedDescription)
+                self.stop(clearPending: true)
+            }
+        }
+    }
 
+    private func beginSpeaking(_ request: Request, forceBasicFallback: Bool) {
         let utterance = AVSpeechUtterance(string: request.text)
         utterance.voice = VoiceResolver.resolve(
             language: request.language,
@@ -95,8 +131,12 @@ final class SpeechService: NSObject, ObservableObject {
 
         speakingText = request.text
         activeUtterance = utterance
-        synthesizer.speak(utterance)
-        startWatchdog(for: request)
+        if let playbackOverride {
+            playbackOverride(utterance)
+        } else {
+            synthesizer.speak(utterance)
+            startWatchdog(for: request)
+        }
     }
 
     private func startWatchdog(for request: Request) {
@@ -127,16 +167,16 @@ final class SpeechService: NSObject, ObservableObject {
         isSpeaking = false
     }
 
-    private func configureAudioSession() {
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-            try session.setActive(true)
-        } catch {
-            #if DEBUG
-            print("[WordMemorySpeech] Audio session setup failed: \(error.localizedDescription)")
-            #endif
-        }
+    private func configureAudioSession() async throws -> Bool {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        return try await session.activate(options: [])
+    }
+
+    private func reportActivationFailure(_ message: String) {
+        #if DEBUG
+        print("[WordMemorySpeech] Audio session setup failed: \(message)")
+        #endif
     }
 
     private func observeAudioSystem() {

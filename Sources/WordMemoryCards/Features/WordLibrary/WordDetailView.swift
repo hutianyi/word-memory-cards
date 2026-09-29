@@ -3,6 +3,7 @@ import SwiftUI
 
 struct WordDetailView: View {
     @ObservedObject var word: WordEntity
+    @EnvironmentObject private var settings: SettingsStore
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
 
@@ -28,7 +29,16 @@ struct WordDetailView: View {
             } header: {
                 Text("词条")
             } footer: {
-                Text("修改中文保留学习进度；实质修改英文后，该词需要重新取得默写资格并完成首次抄写。")
+                Text("修改中文保留学习进度；实质修改英文后，需要重新建立默写资格与抄写进度。已排除默写的词仍保持排除。")
+            }
+
+            Section {
+                Toggle("不再参加默写", isOn: dictationExcludedBinding)
+                    .accessibilityIdentifier("wordDetail.excludeDictation")
+            } header: {
+                Text("默写设置")
+            } footer: {
+                Text("立即保存。开启后，此词不再参加摸底、抄写和正式默写；卡片复习与已有记录保留。关闭后恢复参加默写。")
             }
 
             ForEach(sortedStates, id: \.objectID) { state in
@@ -48,7 +58,7 @@ struct WordDetailView: View {
                         LabeledContent("首次抄写", value: "\(dictation.initialCopyCount) / 3")
                     }
                     LabeledContent("正式默写次数", value: "\(dictation.totalFormal)")
-                    if let due = dictation.nextReviewDate {
+                    if !isExcludedFromDictation, let due = dictation.nextReviewDate {
                         LabeledContent("下次默写", value: due.formatted(date: .abbreviated, time: .omitted))
                     }
                 }
@@ -79,6 +89,24 @@ struct WordDetailView: View {
         } message: {
             Text(savedMessage ?? "")
         }
+    }
+
+    private var isExcludedFromDictation: Bool {
+        settings.masteredDictationTerms.contains(EnglishNormalizer.normalize(word.english))
+    }
+
+    private var dictationExcludedBinding: Binding<Bool> {
+        Binding(
+            get: { isExcludedFromDictation },
+            set: { excluded in
+                let term = EnglishNormalizer.normalize(word.english)
+                if excluded {
+                    settings.masteredDictationTerms.insert(term)
+                } else {
+                    settings.masteredDictationTerms.remove(term)
+                }
+            }
+        )
     }
 
     private var sortedStates: [ReviewStateEntity] {
@@ -126,7 +154,9 @@ struct WordDetailView: View {
                 errorMessage = "这个英文已经存在，不能保存重复词条。"
                 return
             }
-            let resetsDictation = normalized != word.normalizedEnglish
+            let previousTerm = word.normalizedEnglish
+            let wasExcluded = isExcludedFromDictation
+            let resetsDictation = normalized != previousTerm
             if resetsDictation {
                 try DictationRepository.reconcileTasks(
                     for: word.id, preservingHistory: true, in: context
@@ -138,9 +168,19 @@ struct WordDetailView: View {
             word.chinese = trimmedChinese
             word.updatedAt = Date()
             try context.save()
-            savedMessage = resetsDictation
-                ? "词条已更新。原卡片进度保留；此词的默写资格和抄写进度需重新建立。"
-                : "词条已更新，学习记录保持不变。"
+            if resetsDictation && wasExcluded {
+                var terms = settings.masteredDictationTerms
+                terms.remove(previousTerm)
+                terms.insert(normalized)
+                settings.masteredDictationTerms = terms
+            }
+            if resetsDictation {
+                savedMessage = wasExcluded
+                    ? "词条已更新。原卡片进度保留，此词仍排除默写。"
+                    : "词条已更新。原卡片进度保留；此词的默写资格和抄写进度需重新建立。"
+            } else {
+                savedMessage = "词条已更新，学习记录保持不变。"
+            }
         } catch {
             context.rollback()
             errorMessage = error.localizedDescription

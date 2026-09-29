@@ -91,7 +91,9 @@ final class DictationRepository {
                     wordID: word.id,
                     english: word.english,
                     chinese: word.chinese,
-                    completedCopies: Int(state.initialCopyCount)
+                    completedCopies: Int(state.initialCopyCount),
+                    consecutiveFailures: try Self.initialCopyFailures(for: word, state: state, in: context),
+                    keyboardAllowed: try Self.initialKeyboardAllowed(for: word, state: state, in: context)
                 ))
             }
             if context.hasChanges { try context.save() }
@@ -99,16 +101,21 @@ final class DictationRepository {
         }
     }
 
-    func recordInitialCopy(wordID: UUID, recognized: String, now: Date = Date()) async throws -> InitialCopyPrompt {
+    func recordInitialCopy(wordID: UUID, recognized: String, viaKeyboard: Bool = false,
+                           explicitReason: DictationFailureReason? = nil, now: Date = Date()) async throws -> InitialCopyPrompt {
         let context = makeContext()
         let calendar = self.calendar
         return try await context.perform {
             let word = try Self.fetchWord(wordID, in: context)
             guard let state = word.dictationState,
                   state.initialCopyCompletedAt == nil else { throw DictationError.invalidPhase }
-            let correct = DictationAnswerMatcher.matches(recognized, answer: word.english)
+            let failures = try Self.initialCopyFailures(for: word, state: state, in: context)
+            guard try !viaKeyboard || Self.initialKeyboardAllowed(for: word, state: state, in: context) else {
+                throw DictationError.invalidPhase
+            }
+            let correct = explicitReason == nil && DictationAnswerMatcher.matches(recognized, answer: word.english)
             if correct {
-                state.initialCopyCount += 1
+                state.initialCopyCount = viaKeyboard ? 3 : state.initialCopyCount + 1
                 if state.initialCopyCount >= 3 {
                     state.initialCopyCompletedAt = now
                     state.fsrsCardData = try SRSScheduler.encodeCard(SRSScheduler.emptyCard(due: now))
@@ -118,15 +125,18 @@ final class DictationRepository {
             }
             Self.recordEvent(
                 in: context, wordID: wordID, dayKey: DictationEligibility.dayKey(for: now, calendar: calendar),
-                kind: "initialCopy", correct: correct, recognized: recognized,
-                english: word.english, chinese: word.chinese, now: now
+                kind: viaKeyboard ? "initialCopyKeyboard" : "initialCopy", correct: correct, reason: explicitReason, recognized: recognized,
+                english: word.english, chinese: word.chinese, now: now,
+                round: viaKeyboard || correct ? 0 : failures + 1
             )
             try context.save()
             return InitialCopyPrompt(
                 wordID: word.id,
                 english: word.english,
                 chinese: word.chinese,
-                completedCopies: Int(state.initialCopyCount)
+                completedCopies: Int(state.initialCopyCount),
+                consecutiveFailures: try Self.initialCopyFailures(for: word, state: state, in: context),
+                keyboardAllowed: try Self.initialKeyboardAllowed(for: word, state: state, in: context)
             )
         }
     }
@@ -209,6 +219,7 @@ final class DictationRepository {
                         day.phase = .complete
                     default: break
                     }
+                    Self.advanceRemediation(&day)
                     try Self.save(day, to: entity, now: now, in: context)
                 }
                 if day.dayKey == today,
@@ -227,8 +238,14 @@ final class DictationRepository {
                     try Self.save(day, to: entity, now: now, in: context)
                 }
                 if day.dayKey != today && day.phase == .firstPass {
-                    day.items.removeAll { $0.formalResult == nil }
-                    day.phase = day.firstPassWrong > 0 ? .firstPassSummary : .complete
+                    day.items.removeAll { $0.formalResult == nil && !$0.awaitsVerification }
+                    day.phase = day.items.contains(where: \.awaitsVerification) ? .firstPass
+                        : (day.firstPassWrong > 0 ? .firstPassSummary : .complete)
+                    try Self.save(day, to: entity, now: now, in: context)
+                }
+                if day.items.contains(where: \.isDeferred) {
+                    for index in day.items.indices { day.items[index].deferred = nil }
+                    Self.advanceRemediation(&day)
                     try Self.save(day, to: entity, now: now, in: context)
                 }
                 if day.phase != .complete { return day }
@@ -324,11 +341,85 @@ final class DictationRepository {
         }
     }
 
+    func stageVerification(
+        dayID: UUID, wordID: UUID, recognized: String?, now: Date = Date()
+    ) async throws -> DictationDay {
+        let context = makeContext()
+        return try await context.perform {
+            let entity = try Self.fetchDay(dayID, in: context)
+            var day = try Self.snapshot(entity)
+            guard let index = Self.activeTimedIndex(in: day), day.items[index].wordID == wordID,
+                  !day.items[index].awaitsVerification else { throw DictationError.invalidPhase }
+            let word = try Self.fetchWord(wordID, in: context)
+            guard DictationAnswerMatcher.normalize(word.english) == DictationAnswerMatcher.normalize(day.items[index].english) else {
+                throw DictationError.answerChanged
+            }
+            guard !DictationAnswerMatcher.matches(recognized ?? "", answer: word.english) else {
+                throw DictationError.invalidPhase
+            }
+            day.items[index].pendingHandwriting = recognized ?? ""
+            day.items[index].isWriting = false
+            let item = day.items[index]
+            Self.recordEvent(in: context, wordID: wordID, dayID: day.id, dayKey: day.dayKey,
+                             kind: "recognitionMismatch", correct: nil, recognized: recognized,
+                             english: item.english, chinese: item.chinese, now: now,
+                             remaining: item.remainingSeconds, round: item.remediationRound)
+            try Self.save(day, to: entity, now: now, in: context)
+            return day
+        }
+    }
+
+    func beginKeyboardVerification(dayID: UUID, wordID: UUID, now: Date = Date()) async throws -> DictationDay {
+        let context = makeContext()
+        return try await context.perform {
+            let entity = try Self.fetchDay(dayID, in: context)
+            var day = try Self.snapshot(entity)
+            guard let index = Self.activeTimedIndex(in: day), day.items[index].wordID == wordID,
+                  day.items[index].awaitsVerification else { throw DictationError.invalidPhase }
+            if day.items[index].keyboardDeadline == nil {
+                day.items[index].keyboardDeadline = now.addingTimeInterval(DictationKeyboardClock.duration)
+                try Self.save(day, to: entity, now: now, in: context)
+            }
+            return day
+        }
+    }
+
+    private static func verificationInput(
+        item: DictationItem, recognized: String?, explicitReason: DictationFailureReason?,
+        resolvingVerification: Bool, viaKeyboard: Bool, now: Date
+    ) throws -> (text: String?, reason: DictationFailureReason?) {
+        guard item.awaitsVerification == resolvingVerification, !viaKeyboard || resolvingVerification else {
+            throw DictationError.invalidPhase
+        }
+        guard resolvingVerification else { return (recognized, explicitReason) }
+        if viaKeyboard {
+            guard let deadline = item.keyboardDeadline else { throw DictationError.invalidPhase }
+            let reason = now >= deadline ? DictationFailureReason.timeout : explicitReason
+            // A blank keyboard confirmation is an incorrect final answer, never an OCR retry.
+            return (recognized, reason ?? (DictationAnswerMatcher.normalize(recognized ?? "").isEmpty ? .spelling : nil))
+        }
+        guard item.keyboardDeadline == nil else { throw DictationError.invalidPhase }
+        return (item.pendingHandwriting,
+                DictationAnswerMatcher.normalize(item.pendingHandwriting ?? "").isEmpty ? .recognition : .spelling)
+    }
+
+    private static func recordKeyboardVerification(
+        item: DictationItem, day: DictationDay, input: String?, correct: Bool,
+        reason: DictationFailureReason?, now: Date, in context: NSManagedObjectContext
+    ) {
+        Self.recordEvent(in: context, wordID: item.wordID, dayID: day.id, dayKey: day.dayKey,
+                         kind: "keyboardVerification", correct: correct, reason: reason, recognized: input,
+                         english: item.english, chinese: item.chinese, now: now,
+                         remaining: item.keyboardDeadline.map { DictationKeyboardClock.remaining(until: $0, now: now) } ?? 0,
+                         round: item.remediationRound)
+    }
+
     func submitFormal(
         dayID: UUID,
         wordID: UUID,
         recognized: String?,
         explicitReason: DictationFailureReason? = nil,
+        resolvingVerification: Bool = false, viaKeyboard: Bool = false,
         now: Date = Date()
     ) async throws -> DictationSubmission {
         let context = makeContext()
@@ -350,8 +441,10 @@ final class DictationRepository {
                 throw DictationError.alreadyAnswered
             }
 
-            let normalized = recognized.map(DictationAnswerMatcher.normalize) ?? ""
-            if explicitReason == nil && normalized.isEmpty && item.recognitionFailures == 0 {
+            let input = try Self.verificationInput(item: item, recognized: recognized, explicitReason: explicitReason,
+                                                   resolvingVerification: resolvingVerification, viaKeyboard: viaKeyboard, now: now)
+            let normalized = input.text.map(DictationAnswerMatcher.normalize) ?? ""
+            if input.reason == nil && normalized.isEmpty && item.recognitionFailures == 0 {
                 item.recognitionFailures = 1
                 day.items[index] = item
                 Self.recordEvent(
@@ -363,11 +456,11 @@ final class DictationRepository {
                 try Self.save(day, to: entity, now: now, in: context)
                 return .retry(day)
             }
-            let correct = explicitReason == nil
+            let correct = input.reason == nil
                 && !normalized.isEmpty
                 && DictationAnswerMatcher.matches(normalized, answer: item.english)
             let reason: DictationFailureReason? = correct ? nil
-                : explicitReason ?? (normalized.isEmpty ? .recognition : .spelling)
+                : input.reason ?? (normalized.isEmpty ? .recognition : .spelling)
             let state: DictationStateEntity
             if let existing = word.dictationState {
                 state = existing
@@ -391,6 +484,12 @@ final class DictationRepository {
                 state.formalNotBefore = DictationEligibility.nextDay(after: now, calendar: calendar)
             }
             item.formalResult = correct
+            if viaKeyboard {
+                Self.recordKeyboardVerification(item: item, day: day, input: input.text, correct: correct, reason: reason, now: now, in: context)
+            }
+            item.formalInputMethod = viaKeyboard ? "keyboard" : "handwriting"
+            item.pendingHandwriting = nil
+            item.keyboardDeadline = nil
             item.isWriting = false
             item.formalReason = reason
             item.formalSubmittedAt = now
@@ -398,7 +497,7 @@ final class DictationRepository {
             Self.recordEvent(
                 in: context, wordID: wordID, dayID: day.id, dayKey: day.dayKey,
                 kind: item.belongsToBaseline ? "baselineFormal" : "formal",
-                correct: correct, reason: reason, recognized: recognized,
+                correct: correct, reason: reason, recognized: input.text,
                 english: item.english, chinese: item.chinese, now: now,
                 remaining: item.remainingSeconds,
                 fsrsBefore: cardBefore, fsrsAfter: decision.cardData
@@ -412,7 +511,8 @@ final class DictationRepository {
     }
 
     func recordRemediationCopy(
-        dayID: UUID, wordID: UUID, recognized: String, now: Date = Date()
+        dayID: UUID, wordID: UUID, recognized: String, viaKeyboard: Bool = false,
+        explicitReason: DictationFailureReason? = nil, now: Date = Date()
     ) async throws -> DictationDay {
         let context = makeContext()
         return try await context.perform {
@@ -426,19 +526,24 @@ final class DictationRepository {
                     == DictationAnswerMatcher.normalize(day.items[index].english) else {
                 throw DictationError.answerChanged
             }
-            let correct = DictationAnswerMatcher.matches(recognized, answer: day.items[index].english)
+            guard !day.items[index].isDeferred,
+                  !viaKeyboard || day.items[index].allowsKeyboard else { throw DictationError.invalidPhase }
+            let correct = explicitReason == nil && DictationAnswerMatcher.matches(recognized, answer: day.items[index].english)
             if correct {
-                day.items[index].remediationCopyCount += 1
+                day.items[index].remediationCopyCount = viaKeyboard ? 3 : day.items[index].remediationCopyCount + 1
+            }
+            if !viaKeyboard {
+                let failures = correct ? 0 : (day.items[index].consecutiveCopyFailures ?? 0) + 1
+                day.items[index].consecutiveCopyFailures = failures
+                if failures >= 3 { day.items[index].keyboardAllowed = true }
             }
             Self.recordEvent(
                 in: context, wordID: wordID, dayID: day.id, dayKey: day.dayKey,
-                kind: "remediationCopy", correct: correct, recognized: recognized,
+                kind: viaKeyboard ? "remediationCopyKeyboard" : "remediationCopy", correct: correct, reason: explicitReason, recognized: recognized,
                 english: day.items[index].english, chinese: day.items[index].chinese,
                 now: now, round: day.items[index].remediationRound
             )
-            if day.items.filter(\.needsRemediation).allSatisfy({ $0.remediationCopyCount >= 3 }) {
-                day.phase = .retest
-            }
+            Self.advanceRemediation(&day)
             try Self.save(day, to: entity, now: now, in: context)
             return day
         }
@@ -446,7 +551,8 @@ final class DictationRepository {
 
     func submitRetest(
         dayID: UUID, wordID: UUID, recognized: String?,
-        explicitReason: DictationFailureReason? = nil, now: Date = Date()
+        explicitReason: DictationFailureReason? = nil,
+        resolvingVerification: Bool = false, viaKeyboard: Bool = false, now: Date = Date()
     ) async throws -> DictationSubmission {
         let context = makeContext()
         let calendar = self.calendar
@@ -455,7 +561,7 @@ final class DictationRepository {
             var day = try Self.snapshot(entity)
             guard day.phase == .retest,
                   let index = day.items.firstIndex(where: {
-                      $0.wordID == wordID && $0.needsRemediation && !$0.retestAttempted
+                      $0.wordID == wordID && $0.needsRemediation && !$0.retestAttempted && !$0.isDeferred && $0.remediationCopyCount >= 3
                   }) else { throw DictationError.invalidPhase }
             var item = day.items[index]
             let word = try Self.fetchWord(wordID, in: context)
@@ -463,8 +569,10 @@ final class DictationRepository {
                     == DictationAnswerMatcher.normalize(item.english) else {
                 throw DictationError.answerChanged
             }
-            let normalized = recognized.map(DictationAnswerMatcher.normalize) ?? ""
-            if explicitReason == nil && normalized.isEmpty && item.recognitionFailures == 0 {
+            let input = try Self.verificationInput(item: item, recognized: recognized, explicitReason: explicitReason,
+                                                   resolvingVerification: resolvingVerification, viaKeyboard: viaKeyboard, now: now)
+            let normalized = input.text.map(DictationAnswerMatcher.normalize) ?? ""
+            if input.reason == nil && normalized.isEmpty && item.recognitionFailures == 0 {
                 item.recognitionFailures = 1
                 day.items[index] = item
                 Self.recordEvent(
@@ -476,12 +584,18 @@ final class DictationRepository {
                 try Self.save(day, to: entity, now: now, in: context)
                 return .retry(day)
             }
-            let correct = explicitReason == nil
+            let correct = input.reason == nil
                 && !normalized.isEmpty
                 && DictationAnswerMatcher.matches(normalized, answer: item.english)
             let reason: DictationFailureReason? = correct ? nil
-                : explicitReason ?? (normalized.isEmpty ? .recognition : .spelling)
+                : input.reason ?? (normalized.isEmpty ? .recognition : .spelling)
             item.retestAttempted = true
+            if viaKeyboard {
+                Self.recordKeyboardVerification(item: item, day: day, input: input.text, correct: correct, reason: reason, now: now, in: context)
+            }
+            item.retestInputMethod = viaKeyboard ? "keyboard" : "handwriting"
+            item.pendingHandwriting = nil
+            item.keyboardDeadline = nil
             item.isWriting = false
             item.recognitionFailures = 0
             if correct {
@@ -492,25 +606,84 @@ final class DictationRepository {
             } else {
                 item.remediationCopyCount = 0
                 item.remediationRound += 1
+                item.consecutiveCopyFailures = 0
+                item.remainingSeconds = 30
             }
             day.items[index] = item
             Self.recordEvent(
                 in: context, wordID: wordID, dayID: day.id, dayKey: day.dayKey,
-                kind: "retest", correct: correct, reason: reason, recognized: recognized,
+                kind: "retest", correct: correct, reason: reason, recognized: input.text,
                 english: item.english, chinese: item.chinese, now: now,
                 remaining: item.remainingSeconds, round: item.remediationRound
             )
-            if day.unresolved == 0 {
-                day.phase = .complete
-            } else if day.items.filter(\.needsRemediation).allSatisfy(\.retestAttempted) {
-                day.phase = .remediationCopy
-                for index in day.items.indices where day.items[index].needsRemediation {
-                    day.items[index].retestAttempted = false
-                }
-            }
+            Self.advanceRemediation(&day)
             try Self.save(day, to: entity, now: now, in: context)
             return .result(day, correct: correct, reason: reason)
         }
+    }
+
+    func deferRemediation(dayID: UUID, wordID: UUID, now: Date = Date()) async throws -> DictationDay {
+        let context = makeContext()
+        return try await context.perform {
+            let entity = try Self.fetchDay(dayID, in: context)
+            var day = try Self.snapshot(entity)
+            guard day.phase == .remediationCopy || day.phase == .retest,
+                  let index = day.items.firstIndex(where: { $0.wordID == wordID && $0.needsRemediation && !$0.isDeferred }) else {
+                throw DictationError.invalidPhase
+            }
+            day.items[index].deferred = true
+            day.items[index].isWriting = false
+            let item = day.items[index]
+            Self.recordEvent(in: context, wordID: wordID, dayID: day.id, dayKey: day.dayKey,
+                             kind: "deferred", correct: nil, recognized: nil,
+                             english: item.english, chinese: item.chinese, now: now, round: item.remediationRound)
+            Self.advanceRemediation(&day)
+            try Self.save(day, to: entity, now: now, in: context)
+            return day
+        }
+    }
+
+    private static func advanceRemediation(_ day: inout DictationDay) {
+        guard day.phase == .remediationCopy || day.phase == .retest else { return }
+        if day.unresolved == 0 { day.phase = .complete; return }
+        let runnable = day.items.filter { $0.needsRemediation && !$0.isDeferred }
+        guard !runnable.isEmpty else { return }
+        if day.phase == .retest && runnable.contains(where: { !$0.retestAttempted && $0.remediationCopyCount >= 3 }) { return }
+        if runnable.contains(where: { $0.remediationCopyCount < 3 }) {
+            day.phase = .remediationCopy
+            for index in day.items.indices where day.items[index].needsRemediation && !day.items[index].isDeferred {
+                day.items[index].retestAttempted = false
+            }
+        } else {
+            day.phase = .retest
+            for index in day.items.indices where day.items[index].needsRemediation && !day.items[index].isDeferred {
+                day.items[index].remainingSeconds = 30
+                day.items[index].recognitionFailures = 0
+            }
+        }
+    }
+
+    private static func initialCopyEvents(for word: WordEntity, state: DictationStateEntity,
+                                          in context: NSManagedObjectContext) throws -> [DictationEventEntity] {
+        let request = DictationEventEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "wordID == %@ AND kind == %@ AND submittedAt >= %@",
+                                        word.id as CVarArg, "initialCopy", state.initialCopyStartedAt as NSDate)
+        request.sortDescriptors = [NSSortDescriptor(key: "submittedAt", ascending: false)]
+        return try context.fetch(request).filter {
+            DictationAnswerMatcher.normalize($0.answerSnapshot) == state.englishVersion
+        }
+    }
+
+    private static func initialCopyFailures(for word: WordEntity, state: DictationStateEntity,
+                                            in context: NSManagedObjectContext) throws -> Int {
+        let events = try initialCopyEvents(for: word, state: state, in: context)
+        return events.prefix(while: { $0.result == "incorrect" }).count
+    }
+
+    private static func initialKeyboardAllowed(for word: WordEntity, state: DictationStateEntity,
+                                               in context: NSManagedObjectContext) throws -> Bool {
+        let events = try initialCopyEvents(for: word, state: state, in: context)
+        return events.contains { $0.round >= 3 } || events.prefix(while: { $0.result == "incorrect" }).count >= 3
     }
 
     private static func recordEvent(
@@ -569,7 +742,7 @@ final class DictationRepository {
         case .firstPass:
             return day.items.firstIndex { $0.formalResult == nil }
         case .retest:
-            return day.items.firstIndex { $0.needsRemediation && !$0.retestAttempted }
+            return day.items.firstIndex { $0.needsRemediation && !$0.retestAttempted && !$0.isDeferred && $0.remediationCopyCount >= 3 }
         case .firstPassSummary, .remediationCopy, .complete:
             return nil
         }

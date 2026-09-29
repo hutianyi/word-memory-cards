@@ -31,6 +31,19 @@ struct DictationItem: Codable, Equatable, Identifiable {
     var isWriting = false
     var interruptionCount = 0
     var isBaseline: Bool? = nil
+    // Optional fields keep older saved queues and backups readable.
+    var consecutiveCopyFailures: Int? = nil
+    var keyboardAllowed: Bool? = nil
+    var deferred: Bool? = nil
+    var pendingHandwriting: String? = nil
+    var keyboardDeadline: Date? = nil
+    var formalInputMethod: String? = nil
+    var retestInputMethod: String? = nil
+
+    var awaitsVerification: Bool { pendingHandwriting != nil }
+
+    var isDeferred: Bool { deferred == true }
+    var allowsKeyboard: Bool { keyboardAllowed == true }
 
     var id: UUID { wordID }
     var needsRemediation: Bool { formalResult == false && !remediationPassed }
@@ -77,6 +90,14 @@ struct DictationDay: Codable, Equatable {
     }
 }
 
+enum DictationKeyboardClock {
+    static let duration: TimeInterval = 60
+
+    static func remaining(until deadline: Date, now: Date = Date()) -> TimeInterval {
+        max(0, min(duration, deadline.timeIntervalSince(now)))
+    }
+}
+
 enum DictationAnswerMatcher {
     static func normalize(_ text: String) -> String {
         EnglishNormalizer.normalize(text)
@@ -102,6 +123,8 @@ struct InitialCopyPrompt: Identifiable, Equatable {
     let english: String
     let chinese: String
     let completedCopies: Int
+    var consecutiveFailures: Int = 0
+    var keyboardAllowed: Bool = false
 
     var id: UUID { wordID }
 }

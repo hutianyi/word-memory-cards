@@ -5,6 +5,8 @@ import SwiftUI
 struct DictationView: View {
     @StateObject private var viewModel: DictationViewModel
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var speech: SpeechService
+    @ObservedObject private var settings: SettingsStore
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var drawing = PKDrawing()
@@ -14,8 +16,17 @@ struct DictationView: View {
     @State private var isClockRunning = false
     @State private var isSubmitting = false
     @State private var timerPersistenceTask: Task<Void, Never>?
+    @State private var keyboardPrompt: KeyboardPrompt?
+    @State private var verificationAlertPresented = false
+
+    private struct KeyboardPrompt: Identifiable {
+        let id: String
+        let chinese: String
+        let answer: String?
+    }
 
     init(container: NSPersistentContainer, settings: SettingsStore) {
+        self.settings = settings
         _viewModel = StateObject(
             wrappedValue: DictationViewModel(container: container, settings: settings)
         )
@@ -28,7 +39,10 @@ struct DictationView: View {
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
-        .task { await viewModel.start() }
+        .task { speech.stop(); await viewModel.start(); presentPendingVerification() }
+        .onChange(of: copyNarrationKey, initial: true) { _, _ in narrateCurrentCopy() }
+        .onDisappear { speech.stop() }
+        .onChange(of: viewModel.verificationKey) { _, _ in presentPendingVerification() }
         .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
             tick()
         }
@@ -49,14 +63,52 @@ struct DictationView: View {
         }
         .onChange(of: scenePhase) { _, newValue in
             if newValue != .active {
+                speech.stop()
                 pauseClock()
                 persistTimerState(isWriting: false)
+            } else {
+                narrateCurrentCopy()
             }
         }
-        .alert("默写暂时无法继续", isPresented: errorBinding) {
-            Button("好", role: .cancel) {}
+        .sheet(item: $keyboardPrompt, onDismiss: {
+            if scenePhase == .active {
+                startClock()
+                narrateCurrentCopy()
+            }
+        }) { prompt in
+            DictationKeyboardSheet(
+                chinese: prompt.chinese, answer: prompt.answer,
+                submissionError: { viewModel.errorMessage },
+                startClock: prompt.answer == nil ? { await viewModel.beginVerificationKeyboard() } : nil
+            ) { text, reason in
+                guard viewModel.questionKey == prompt.id else { return true }
+                let close = await viewModel.submitKeyboard(text, reason: reason)
+                if close { drawing = PKDrawing() }
+                return close
+            }
+            .interactiveDismissDisabled(prompt.answer == nil || viewModel.isBusy)
+        }
+        .onChange(of: viewModel.recognitionNotice) { _, newValue in
+            if newValue != nil {
+                speech.stop()
+                pauseClock()
+            } else if scenePhase == .active {
+                startClock()
+                narrateCurrentCopy()
+            }
+        }
+        .alert(viewModel.errorMessage == nil ? "手写识别结果" : "默写暂时无法继续", isPresented: alertBinding) {
+            if viewModel.errorMessage == nil && verificationAlertPresented {
+                Button("改用字母键盘（60秒）", action: openVerificationKeyboard)
+                Button("按本次结果提交") { Task { await viewModel.acceptHandwritingResult() } }
+            } else {
+                Button("知道了", role: .cancel) {
+                    viewModel.errorMessage = nil
+                    viewModel.dismissRecognitionNotice()
+                }
+            }
         } message: {
-            Text(viewModel.errorMessage ?? "发生未知错误。")
+            Text(viewModel.errorMessage ?? (verificationAlertPresented ? viewModel.verificationMessage : viewModel.recognitionNotice) ?? "发生未知错误。")
         }
     }
 
@@ -66,13 +118,17 @@ struct DictationView: View {
             ProgressView("正在准备默写…")
         } else if let feedback = viewModel.feedback {
             feedbackView(feedback)
+        } else if viewModel.awaitsVerification {
+            verificationView
         } else if viewModel.isInitialCopy {
             if viewModel.activeCopy != nil { practiceView }
+            else if viewModel.hasDeferredWork { deferredView }
             else { initialCopyCompleteView }
         } else if let day = viewModel.day {
             switch day.phase {
             case .firstPass, .remediationCopy, .retest:
-                practiceView
+                if viewModel.hasDeferredWork { deferredView }
+                else { practiceView }
             case .firstPassSummary:
                 firstPassSummary(day)
             case .complete:
@@ -81,6 +137,27 @@ struct DictationView: View {
         } else {
             statusView("暂时无法载入默写任务", symbol: "exclamationmark.triangle")
         }
+    }
+
+    private var verificationView: some View {
+        VStack(spacing: 22) {
+            Text(prompt?.chinese ?? "").font(.largeTitle.bold())
+            Text(viewModel.verificationMessage)
+                .font(.title3).multilineTextAlignment(.center)
+            if viewModel.activeItem?.keyboardDeadline == nil {
+                Button("改用字母键盘（60秒）", action: openVerificationKeyboard)
+                    .buttonStyle(LargePrimaryButtonStyle())
+                Button("按本次结果提交") { Task { await viewModel.acceptHandwritingResult() } }
+                    .buttonStyle(LargeSecondaryButtonStyle())
+            } else {
+                Button("继续键盘复核", action: openVerificationKeyboard)
+                    .buttonStyle(LargePrimaryButtonStyle())
+            }
+            Button("稍后继续", action: returnHome)
+        }
+        .disabled(viewModel.isBusy)
+        .frame(maxWidth: 620)
+        .padding(28)
     }
 
     private var practiceView: some View {
@@ -159,6 +236,22 @@ struct DictationView: View {
                     }
                     .frame(maxWidth: 620)
 
+                    if viewModel.keyboardAllowed {
+                        VStack(spacing: 8) {
+                            Text("手写连续三次未通过，可以用键盘输入一次完成剩余抄写。")
+                                .font(.subheadline)
+                                .foregroundStyle(AppPalette.textSecondary)
+                            Button("改用键盘输入", action: openKeyboard)
+                                .buttonStyle(.borderedProminent)
+                                .accessibilityIdentifier("dictation.keyboardFallback")
+                        }
+                        .disabled(viewModel.isBusy || isSubmitting)
+                    }
+                    if viewModel.canDefer {
+                        Button("稍后再练这个词", action: deferCurrent)
+                            .disabled(viewModel.isBusy || isSubmitting)
+                            .accessibilityIdentifier("dictation.deferWord")
+                    }
                     if viewModel.isTimed {
                         Button("不会") { submit(reason: .unknown) }
                             .font(.headline)
@@ -183,6 +276,24 @@ struct DictationView: View {
 
     private var isCopyStage: Bool {
         viewModel.isInitialCopy || viewModel.day?.phase == .remediationCopy
+    }
+
+    private var copyNarrationKey: String? {
+        guard !viewModel.isLoading, isCopyStage, viewModel.feedback == nil else { return nil }
+        return viewModel.questionKey
+    }
+
+    private func narrateCurrentCopy() {
+        speech.stop()
+        guard copyNarrationKey != nil, scenePhase == .active,
+              keyboardPrompt == nil, viewModel.recognitionNotice == nil,
+              viewModel.errorMessage == nil, let prompt else { return }
+        speech.speak(
+            prompt.english,
+            language: .english,
+            preferredIdentifier: settings.englishVoiceIdentifier,
+            rate: settings.englishSpeechRate
+        )
     }
 
     private var progressTitle: String {
@@ -259,6 +370,20 @@ struct DictationView: View {
         .padding(28)
     }
 
+    private var deferredView: some View {
+        VStack(spacing: 20) {
+            Text("其他词已练完，暂缓的词还没完成")
+                .font(.title2.bold())
+            Text("这些词会保留待练状态，下次进入可以继续。")
+                .foregroundStyle(AppPalette.textSecondary)
+            Button("继续练暂缓的词") { Task { await viewModel.resumeDeferred() } }
+                .buttonStyle(LargePrimaryButtonStyle())
+                .frame(maxWidth: 400)
+            Button("返回首页", action: returnHome)
+        }
+        .padding(28)
+    }
+
     private var initialCopyCompleteView: some View {
         statusView("今天可开始的首次抄写已完成", symbol: "checkmark.circle.fill")
     }
@@ -298,6 +423,7 @@ struct DictationView: View {
     private func submit(reason: DictationFailureReason? = nil) {
         guard !isSubmitting else { return }
         isSubmitting = true
+        speech.stop()
         pauseClock()
         let effectiveReason: DictationFailureReason? = viewModel.isTimed && remaining <= 0
             ? .timeout : reason
@@ -322,10 +448,56 @@ struct DictationView: View {
         }
     }
 
+    private func presentPendingVerification() {
+        guard !viewModel.isLoading, viewModel.awaitsVerification else { return }
+        pauseClock()
+        if viewModel.activeItem?.keyboardDeadline == nil {
+            verificationAlertPresented = true
+        } else if keyboardPrompt == nil {
+            openVerificationKeyboard()
+        }
+    }
+
+    private func openVerificationKeyboard() {
+        guard viewModel.awaitsVerification, let key = viewModel.questionKey, let prompt else { return }
+        verificationAlertPresented = false
+        pauseClock()
+        keyboardPrompt = KeyboardPrompt(id: key, chinese: prompt.chinese, answer: nil)
+    }
+
+    private func openKeyboard() {
+        guard viewModel.keyboardAllowed, let key = viewModel.questionKey, let prompt else { return }
+        speech.stop()
+        pauseClock()
+        let request = KeyboardPrompt(id: key, chinese: prompt.chinese, answer: prompt.english)
+        isSubmitting = true
+        Task {
+            persistTimerState(isWriting: false)
+            await timerPersistenceTask?.value
+            keyboardPrompt = request
+            isSubmitting = false
+        }
+    }
+
+    private func deferCurrent() {
+        guard !isSubmitting else { return }
+        speech.stop()
+        pauseClock()
+        isSubmitting = true
+        Task {
+            persistTimerState(isWriting: false)
+            await timerPersistenceTask?.value
+            await viewModel.deferCurrent()
+            drawing = PKDrawing()
+            isSubmitting = false
+            if scenePhase == .active { startClock() }
+        }
+    }
+
     private func startClock() {
         guard viewModel.isTimed, viewModel.activeItem != nil,
-              viewModel.feedback == nil, !viewModel.isBusy, !isSubmitting,
-              !isClockRunning, remaining > 0 else { return }
+              viewModel.feedback == nil, viewModel.recognitionNotice == nil, !viewModel.awaitsVerification, !viewModel.isBusy, !isSubmitting,
+              keyboardPrompt == nil, !isClockRunning, remaining > 0 else { return }
         budgetAtStart = remaining
         startedUptime = ProcessInfo.processInfo.systemUptime
         isClockRunning = true
@@ -345,14 +517,19 @@ struct DictationView: View {
         if remaining <= 0 { submit(reason: .timeout) }
     }
 
-    private var errorBinding: Binding<Bool> {
+    private var alertBinding: Binding<Bool> {
         Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
+            get: { viewModel.errorMessage != nil || viewModel.recognitionNotice != nil || verificationAlertPresented },
+            set: { if !$0 {
+                verificationAlertPresented = false
+                viewModel.errorMessage = nil
+                viewModel.dismissRecognitionNotice()
+            } }
         )
     }
 
     private func returnHome() {
+        speech.stop()
         pauseClock()
         Task {
             persistTimerState(isWriting: false)
@@ -373,6 +550,150 @@ struct DictationView: View {
                 dayID: dayID, wordID: wordID,
                 remaining: savedRemaining, isWriting: isWriting
             )
+        }
+    }
+}
+
+private struct DictationKeyboardSheet: View {
+    let chinese: String
+    let answer: String?
+    let submissionError: () -> String?
+    let startClock: (() async -> Date?)?
+    let submit: (String, DictationFailureReason?) async -> Bool
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var text = ""
+    @State private var isSubmitting = false
+    @State private var message: String?
+    @State private var deadline: Date?
+    @State private var remaining: TimeInterval = 60
+    @State private var automaticTimeoutAttempted = false
+
+    private var isVerification: Bool { answer == nil }
+    private var ready: Bool { deadline != nil }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Text(chinese).font(.title.bold())
+                    if let answer {
+                        Text(answer).font(.title).foregroundStyle(AppPalette.accent)
+                        Text("60秒内输入完整单词，完成这个词剩余的抄写。")
+                    } else {
+                        Text("请自己拼出英文；只有一次提交机会。")
+                    }
+                    Text(String(format: "%02d:%02d", Int(ceil(remaining)) / 60, Int(ceil(remaining)) % 60))
+                        .font(.title.monospacedDigit().bold())
+                        .foregroundStyle(remaining <= 10 ? .red : AppPalette.textPrimary)
+                        .accessibilityIdentifier("dictation.keyboardTimer")
+                    // Plain display plus our own keys prevents suggestions, correction, paste, and dictation.
+                    Text(text.isEmpty ? "输入英文" : text)
+                        .font(.title2.monospaced())
+                        .foregroundStyle(text.isEmpty ? AppPalette.textSecondary : AppPalette.textPrimary)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .padding(.horizontal, 12)
+                        .background(AppPalette.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .accessibilityIdentifier("dictation.keyboardText")
+                    letterKeyboard
+                        .disabled(!ready || isSubmitting || remaining <= 0)
+                    if let message {
+                        Text(message).foregroundStyle(.red)
+                        if isVerification && remaining <= 0 {
+                            Button("重试保存超时结果") { confirm(reason: .timeout) }
+                                .disabled(isSubmitting)
+                        }
+                    }
+                    Text(isVerification ? "确认后立即判定；错误或超时进入下一词。" : "本次记录为键盘辅助，不改写首次默写成绩。")
+                        .font(.subheadline).foregroundStyle(AppPalette.textSecondary)
+                    Button("确认输入") { confirm() }
+                        .buttonStyle(LargePrimaryButtonStyle())
+                        .disabled(!ready || isSubmitting || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("dictation.keyboardConfirm")
+                }
+                .padding(28)
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
+            }
+            .navigationTitle(isVerification ? "键盘复核" : "键盘辅助抄写")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if isVerification {
+                        Button("不会") { confirm(reason: .unknown) }
+                            .disabled(!ready || isSubmitting)
+                    } else {
+                        Button("继续手写") { dismiss() }.disabled(isSubmitting)
+                    }
+                }
+            }
+            .task {
+                if let startClock {
+                    deadline = await startClock()
+                    if deadline == nil { message = "暂时无法载入计时，请关闭后重试。" }
+                } else {
+                    deadline = Date().addingTimeInterval(DictationKeyboardClock.duration)
+                }
+                checkDeadline()
+            }
+            .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in checkDeadline() }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { checkDeadline() } }
+            .overlay(alignment: .bottom) {
+                if isVerification && deadline == nil && message != nil {
+                    Button("关闭后重试") { dismiss() }.padding()
+                }
+            }
+        }
+    }
+
+    private var letterKeyboard: some View {
+        VStack(spacing: 8) {
+            ForEach(["qwertyuiop", "asdfghjkl", "zxcvbnm"], id: \.self) { row in
+                HStack(spacing: 6) {
+                    ForEach(Array(row).map(String.init), id: \.self) { letter in
+                        key(letter) { text += letter; message = nil }
+                    }
+                }
+            }
+            HStack(spacing: 8) {
+                key("'") { text += "'"; message = nil }
+                key("-") { text += "-"; message = nil }
+                key("空格") { text += " "; message = nil }
+                key("删除") { if !text.isEmpty { text.removeLast() }; message = nil }
+            }
+        }
+    }
+
+    private func key(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(.title3.bold())
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(AppPalette.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppPalette.textSecondary.opacity(0.25)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("dictation.key.\(title)")
+    }
+
+    private func checkDeadline() {
+        guard let deadline, !isSubmitting else { return }
+        remaining = DictationKeyboardClock.remaining(until: deadline)
+        if remaining <= 0 && !automaticTimeoutAttempted {
+            automaticTimeoutAttempted = true
+            confirm(reason: .timeout)
+        }
+    }
+
+    private func confirm(reason: DictationFailureReason? = nil) {
+        guard ready, !isSubmitting,
+              reason != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        isSubmitting = true
+        Task {
+            if await submit(text, reason) { dismiss(); return }
+            message = submissionError() ?? (isVerification ? "暂时无法保存，请重试。" : "输入未通过，请核对完整单词后再试一次。")
+            isSubmitting = false
         }
     }
 }

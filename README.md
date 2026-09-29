@@ -16,11 +16,12 @@ backups stay on the device unless the user explicitly exports a backup file.
 - Import, edit, search, and remove user-owned vocabulary.
 - Direction-specific FSRS-6 spaced repetition with a simple two-button review flow.
 - Same-session retry, weak-item practice, progress reports, and streaks.
-- On-device English and Chinese speech, adjustable speech rate, and haptics.
+- On-device English and Chinese speech, adjustable speech rate, and haptics. Audio-session activation is asynchronous to avoid blocking the interface.
 - JSON backup and restore with validation and a safety backup before restore.
-- Apple Pencil 英文默写：首次抄写、30 秒正式首测、错词抄写与重默，使用独立的 FSRS 进度。
+- Apple Pencil 英文默写：首次抄写、30 秒正式首测、错词抄写与重默，使用独立的 FSRS 进度。首次和错词抄写每开始一遍自动朗读英文，沿用设置中的声音和语速。
+- 默写手写不匹配时先显示识别结果、隐藏正确答案，允许一次字母键盘复核：键盘打开后独立计时60秒，无联想/自动纠错；正确算通过，错误或超时判错进入下一词，每题只保存一次最终成绩。抄写连续三次未通过仍可用键盘输入一次完成剩余抄写，纠错训练支持“稍后再练”。
 - 一次性旧词摸底：首次运行新版时自动固定今天之前加入且尚未正式默写的旧词；摸底期间每天最多 50 个，完成后恢复常规默认 20 个，新词继续走原有入门流程。
-- 完全掌握的英文写法可记录为默写免练词：不再进入旧词摸底、首次抄写或普通默写；卡片复习保留，名单随完整备份保存。
+- 词库的单词详情提供“不再参加默写”开关，立即保存，可随时关闭恢复；排除的词不再进入旧词摸底、首次抄写或普通默写，卡片复习保留，名单随完整备份保存。
 - iPad-only SwiftUI interface, supporting portrait and landscape on iPadOS 27+.
 
 ## Build and run

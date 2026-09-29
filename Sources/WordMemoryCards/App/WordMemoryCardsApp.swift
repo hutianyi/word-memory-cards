@@ -22,6 +22,7 @@ struct WordMemoryCardsApp: App {
             RootView(settings: settings, speech: speech)
                 .environment(\.managedObjectContext, persistence.container.viewContext)
                 .environmentObject(persistence)
+                .environmentObject(settings)
                 .environmentObject(router)
                 .environmentObject(speech)
         }

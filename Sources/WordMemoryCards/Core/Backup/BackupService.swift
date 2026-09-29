@@ -310,12 +310,13 @@ enum BackupService {
                   wordIDs.contains(event.wordID),
                   event.dayID.map(dictationDayIDs.contains) ?? true,
                   ["initialCopy", "formal", "baselineFormal", "remediationCopy", "retest",
-                   "recognitionRetry", "interruption"].contains(event.kind),
+                   "recognitionRetry", "interruption", "initialCopyKeyboard",
+                   "remediationCopyKeyboard", "deferred", "recognitionMismatch", "keyboardVerification"].contains(event.kind),
                   ["correct", "incorrect", "none"].contains(event.result),
                   event.reason.map({ DictationFailureReason(rawValue: $0) != nil }) ?? true,
                   !event.answerSnapshot.isEmpty,
                   event.remainingSeconds.isFinite,
-                  (0...30).contains(event.remainingSeconds),
+                  (0...(event.kind == "keyboardVerification" ? 60.0 : 30.0)).contains(event.remainingSeconds),
                   event.round >= 0 else {
                 throw BackupError.invalidData("默写作答记录无效")
             }
